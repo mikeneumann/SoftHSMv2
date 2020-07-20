@@ -52,35 +52,14 @@
 #include "BotanGOST.h"
 #include "BotanGOSTR3411.h"
 #endif
-#include "BotanHMAC.h"
-
-#include <botan/init.h>
-
-#if BOTAN_VERSION_CODE < BOTAN_VERSION_CODE_FOR(1,11,14)
-#include <botan/libstate.h>
+#include "BotanMAC.h"
+#ifdef WITH_EDDSA
+#include "BotanEDDSA.h"
 #endif
 
 // Constructor
 BotanCryptoFactory::BotanCryptoFactory()
 {
-#if BOTAN_VERSION_CODE < BOTAN_VERSION_CODE_FOR(1,11,14)
-	wasInitialized = false;
-
-	// Check if Botan has already been initialized
-	if (Botan::Global_State_Management::global_state_exists())
-	{
-		wasInitialized = true;
-	}
-
-	// Init the Botan crypto library
-	if (!wasInitialized)
-	{
-		Botan::LibraryInitializer::initialize("thread_safe=true");
-	}
-#else
-	Botan::LibraryInitializer::initialize("thread_safe=true");
-#endif
-
 	// Create mutex
 	rngsMutex = MutexFactory::i()->getMutex();
 }
@@ -105,16 +84,6 @@ BotanCryptoFactory::~BotanCryptoFactory()
 
 	// Delete the mutex
 	MutexFactory::i()->recycleMutex(rngsMutex);
-
-	// Deinitialize the Botan crypto lib
-#if BOTAN_VERSION_CODE < BOTAN_VERSION_CODE_FOR(1,11,14)
-	if (!wasInitialized)
-	{
-		Botan::LibraryInitializer::deinitialize();
-	}
-#else
-	Botan::LibraryInitializer::deinitialize();
-#endif
 }
 
 // Return the one-and-only instance
@@ -175,6 +144,10 @@ AsymmetricAlgorithm* BotanCryptoFactory::getAsymmetricAlgorithm(AsymAlgo::Type a
 #ifdef WITH_GOST
 		case AsymAlgo::GOST:
 			return new BotanGOST();
+#endif
+#ifdef WITH_EDDSA
+		case AsymAlgo::EDDSA:
+			return new BotanEDDSA();
 #endif
 		default:
 			// No algorithm implementation is available
@@ -240,6 +213,10 @@ MacAlgorithm* BotanCryptoFactory::getMacAlgorithm(MacAlgo::Type algorithm)
 		case MacAlgo::HMAC_GOST:
 			return new BotanHMACGOSTR3411();
 #endif
+		case MacAlgo::CMAC_DES:
+			return new BotanCMACDES();
+		case MacAlgo::CMAC_AES:
+			return new BotanCMACAES();
 		default:
 			// No algorithm implementation is available
 			ERROR_MSG("Unknown algorithm '%i'", algorithm);

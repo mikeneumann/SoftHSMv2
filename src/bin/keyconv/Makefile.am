@@ -1,7 +1,7 @@
 MAINTAINERCLEANFILES =	$(srcdir)/Makefile.in
 
-AM_CPPFLAGS =			@CRYPTO_INCLUDES@ \
-				-I$(srcdir)/../../lib/crypto
+AM_CPPFLAGS =			-I$(srcdir)/../../lib/crypto \
+				@CRYPTO_INCLUDES@
 
 dist_man_MANS =			softhsm2-keyconv.1
 
@@ -22,5 +22,6 @@ if WITH_BOTAN
 softhsm2_keyconv_SOURCES +=	softhsm2-keyconv-botan.cpp
 endif
 
-EXTRA_DIST =			$(srcdir)/*.h \
+EXTRA_DIST =			$(srcdir)/CMakeLists.txt \
+				$(srcdir)/*.h \
 				$(srcdir)/*.cpp

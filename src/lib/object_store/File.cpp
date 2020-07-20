@@ -56,7 +56,8 @@ enum AttributeKind {
 	akBoolean,
 	akInteger,
 	akBinary,
-	akArray
+	akAttrMap,
+	akMechSet
 };
 
 // Constructor
@@ -90,6 +91,7 @@ File::File(std::string inPath, bool forRead /* = true */, bool forWrite /* = fal
 		fd = open(path.c_str(), flags, 0600);
 		if (fd == -1)
 		{
+			ERROR_MSG("Could not open the file (%s): %s", strerror(errno), path.c_str());
 			valid = false;
 			return;
 		}
@@ -111,6 +113,7 @@ File::File(std::string inPath, bool forRead /* = true */, bool forWrite /* = fal
 		fd = _open(path.c_str(), flags, _S_IREAD | _S_IWRITE);
 		if (fd == -1)
 		{
+			ERROR_MSG("Could not open the file (%s): %s", strerror(errno), path.c_str());
 			valid = false;
 			return;
 		}
@@ -257,8 +260,30 @@ bool File::readBool(bool& value)
 	return true;
 }
 
-// Read an array value; warning: not thread safe without locking!
-bool File::readArray(std::map<CK_ATTRIBUTE_TYPE,OSAttribute>& value)
+// Read a mechanism type set value; warning: not thread safe without locking!
+bool File::readMechanismTypeSet(std::set<CK_MECHANISM_TYPE>& value)
+{
+	if (!valid) return false;
+
+	unsigned long count;
+	if (!readULong(count)) return false;
+
+	for (unsigned long i = 0; i < count; i++)
+	{
+		unsigned long mechType;
+		if (!readULong(mechType))
+		{
+			return false;
+		}
+
+		value.insert((CK_MECHANISM_TYPE) mechType);
+	}
+
+	return true;
+}
+
+// Read an attribute map value; warning: not thread safe without locking!
+bool File::readAttributeMap(std::map<CK_ATTRIBUTE_TYPE,OSAttribute>& value)
 {
 	if (!valid) return false;
 
@@ -347,6 +372,23 @@ bool File::readArray(std::map<CK_ATTRIBUTE_TYPE,OSAttribute>& value)
 			}
 			break;
 
+			case akMechSet:
+			{
+				std::set<CK_MECHANISM_TYPE> val;
+				if (!readMechanismTypeSet(val))
+				{
+					return false;
+				}
+				if (8 + val.size() * 8 > len)
+				{
+					return false;
+				}
+				len -= 8 + val.size() * 8;
+
+				value.insert(std::pair<CK_ATTRIBUTE_TYPE,OSAttribute> (attrType, val));
+			}
+			break;
+
 			default:
 				return false;
 		}
@@ -416,7 +458,7 @@ bool File::writeString(const std::string& value)
 {
 	if (!valid) return false;
 
-	ByteString toWrite((const unsigned long) value.size());
+	ByteString toWrite((unsigned long) value.size());
 
 	// Write the value to the file
 	if ((fwrite(toWrite.const_byte_str(), 1, toWrite.size(), stream) != toWrite.size()) ||
@@ -428,8 +470,28 @@ bool File::writeString(const std::string& value)
 	return true;
 }
 
-// Write an array value; warning: not thread safe without locking!
-bool File::writeArray(const std::map<CK_ATTRIBUTE_TYPE,OSAttribute>& value)
+// Write a mechanism type set value; warning: not thread safe without locking!
+bool File::writeMechanismTypeSet(const std::set<CK_MECHANISM_TYPE>& value)
+{
+	if (!valid) return false;
+
+	// write length
+	if (!writeULong(value.size()))
+	{
+		return false;
+	}
+
+	// write each value
+	for (std::set<CK_MECHANISM_TYPE>::const_iterator i = value.begin(); i != value.end(); ++i)
+	{
+		if (!writeULong(*i)) return false;
+	}
+
+	return true;
+}
+
+// Write an attribute map value; warning: not thread safe without locking!
+bool File::writeAttributeMap(const std::map<CK_ATTRIBUTE_TYPE,OSAttribute>& value)
 {
 	if (!valid) return false;
 
@@ -453,6 +515,11 @@ bool File::writeArray(const std::map<CK_ATTRIBUTE_TYPE,OSAttribute>& value)
 		{
 			ByteString val = attr.getByteStringValue();
 			len += 8 + val.size();
+		}
+		else if (attr.isMechanismTypeSetAttribute())
+		{
+			std::set<CK_MECHANISM_TYPE> val = attr.getMechanismTypeSetValue();
+			len += 8 + val.size() * 8;
 		}
 		else
 		{
@@ -514,6 +581,20 @@ bool File::writeArray(const std::map<CK_ATTRIBUTE_TYPE,OSAttribute>& value)
 
 			ByteString val = attr.getByteStringValue();
 			if (!writeByteString(val))
+			{
+				return false;
+			}
+		}
+		else if (attr.isMechanismTypeSetAttribute())
+		{
+			unsigned long attrKind = akMechSet;
+			if (!writeULong(attrKind))
+			{
+				return false;
+			}
+
+			std::set<CK_MECHANISM_TYPE> val = attr.getMechanismTypeSetValue();
+			if (!writeMechanismTypeSet(val))
 			{
 				return false;
 			}

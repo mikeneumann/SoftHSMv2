@@ -49,6 +49,28 @@ const CK_BBOOL IS_PUBLIC = CK_FALSE;
 
 CPPUNIT_TEST_SUITE_REGISTRATION(SymmetricAlgorithmTests);
 
+CK_RV SymmetricAlgorithmTests::generateGenericKey(CK_SESSION_HANDLE hSession, CK_BBOOL bToken, CK_BBOOL bPrivate, CK_OBJECT_HANDLE &hKey)
+{
+	CK_MECHANISM mechanism = { CKM_GENERIC_SECRET_KEY_GEN, NULL_PTR, 0 };
+	CK_ULONG bytes = 16;
+	// CK_BBOOL bFalse = CK_FALSE;
+	CK_BBOOL bTrue = CK_TRUE;
+	CK_ATTRIBUTE keyAttribs[] = {
+		{ CKA_TOKEN, &bToken, sizeof(bToken) },
+		{ CKA_PRIVATE, &bPrivate, sizeof(bPrivate) },
+		{ CKA_ENCRYPT, &bTrue, sizeof(bTrue) },
+		{ CKA_DECRYPT, &bTrue, sizeof(bTrue) },
+		{ CKA_WRAP, &bTrue, sizeof(bTrue) },
+		{ CKA_UNWRAP, &bTrue, sizeof(bTrue) },
+		{ CKA_VALUE_LEN, &bytes, sizeof(bytes) },
+	};
+
+	hKey = CK_INVALID_HANDLE;
+	return CRYPTOKI_F_PTR( C_GenerateKey(hSession, &mechanism,
+			     keyAttribs, sizeof(keyAttribs)/sizeof(CK_ATTRIBUTE),
+			     &hKey) );
+}
+
 CK_RV SymmetricAlgorithmTests::generateAesKey(CK_SESSION_HANDLE hSession, CK_BBOOL bToken, CK_BBOOL bPrivate, CK_OBJECT_HANDLE &hKey)
 {
 	CK_MECHANISM mechanism = { CKM_AES_KEY_GEN, NULL_PTR, 0 };
@@ -133,8 +155,7 @@ void SymmetricAlgorithmTests::encryptDecrypt(
 		const CK_SESSION_HANDLE hSession,
 		const CK_OBJECT_HANDLE hKey,
 		const size_t messageSize,
-		const bool isSizeOK,
-		const bool isCBC)
+		const bool isSizeOK)
 {
 	class PartSize {// class to get random size for part
 	private:        // we want to know for sure that no part length is causing any problem.
@@ -177,8 +198,57 @@ void SymmetricAlgorithmTests::encryptDecrypt(
 
 	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, CRYPTOKI_F_PTR( C_GenerateRandom(hSession, (CK_BYTE_PTR)&vData.front(), messageSize) ) );
 
-	const CK_MECHANISM mechanism = { mechanismType, isCBC ? (CK_VOID_PTR)&vData.front() : NULL_PTR, isCBC ? blockSize : 0 };
+	const CK_MECHANISM mechanism = { mechanismType, NULL_PTR, 0 };
 	CK_MECHANISM_PTR pMechanism((CK_MECHANISM_PTR)&mechanism);
+	CK_AES_CTR_PARAMS ctrParams =
+	{
+		32,
+		{
+			0x00, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01
+		}
+	};
+	CK_BYTE gcmIV[] = {
+		0xCA, 0xFE, 0xBA, 0xBE, 0xFA, 0xCE,
+		0xDB, 0xAD, 0xDE, 0xCA, 0xF8, 0x88
+	};
+	CK_BYTE gcmAAD[] = {
+		0xFE, 0xED, 0xFA, 0xCE, 0xDE, 0xAD, 0xBE, 0xEF,
+		0xFE, 0xED, 0xFA, 0xCE, 0xDE, 0xAD, 0xBE, 0xEF,
+		0xAB, 0xAD, 0xDA, 0xD2
+	};
+	CK_GCM_PARAMS gcmParams =
+	{
+		&gcmIV[0],
+		sizeof(gcmIV),
+		sizeof(gcmIV)*8,
+		&gcmAAD[0],
+		sizeof(gcmAAD),
+		16*8
+	};
+
+	switch (mechanismType)
+	{
+		case CKM_DES_CBC:
+		case CKM_DES_CBC_PAD:
+		case CKM_DES3_CBC:
+		case CKM_DES3_CBC_PAD:
+		case CKM_AES_CBC:
+		case CKM_AES_CBC_PAD:
+			pMechanism->pParameter = (CK_VOID_PTR)&vData.front();
+			pMechanism->ulParameterLen = blockSize;
+			break;
+		case CKM_AES_CTR:
+			pMechanism->pParameter = &ctrParams;
+			pMechanism->ulParameterLen = sizeof(ctrParams);
+			break;
+		case CKM_AES_GCM:
+			pMechanism->pParameter = &gcmParams;
+			pMechanism->ulParameterLen = sizeof(gcmParams);
+			break;
+		default:
+			break;
+	}
 
 	// Single-part encryption
 	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, CRYPTOKI_F_PTR( C_EncryptInit(hSession,pMechanism,hKey) ) );
@@ -212,7 +282,7 @@ void SymmetricAlgorithmTests::encryptDecrypt(
 	}
 	{
 		CK_ULONG ulLastEncryptedPartLen;
-		CK_RV rv( C_EncryptFinal(hSession,NULL_PTR,&ulLastEncryptedPartLen) );
+		const CK_RV rv( CRYPTOKI_F_PTR( C_EncryptFinal(hSession,NULL_PTR,&ulLastEncryptedPartLen) ) );
 		if ( isSizeOK ) {
 			CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
 			const size_t oldSize( vEncryptedDataParted.size() );
@@ -277,7 +347,6 @@ void SymmetricAlgorithmTests::encryptDecrypt(
 	}
 }
 
-#ifdef HAVE_AES_KEY_WRAP_PAD
 CK_RV SymmetricAlgorithmTests::generateRsaPrivateKey(CK_SESSION_HANDLE hSession, CK_BBOOL bToken, CK_BBOOL bPrivate, CK_OBJECT_HANDLE &hKey)
 {
 	CK_MECHANISM mechanism = { CKM_RSA_PKCS_KEY_PAIR_GEN, NULL_PTR, 0 };
@@ -322,9 +391,55 @@ CK_RV SymmetricAlgorithmTests::generateRsaPrivateKey(CK_SESSION_HANDLE hSession,
 	}
 	return rv;
 }
+
+#ifdef WITH_GOST
+CK_RV SymmetricAlgorithmTests::generateGostPrivateKey(CK_SESSION_HANDLE hSession, CK_BBOOL bToken, CK_BBOOL bPrivate, CK_OBJECT_HANDLE &hKey)
+{
+	CK_MECHANISM mechanism = { CKM_GOSTR3410_KEY_PAIR_GEN, NULL_PTR, 0 };
+	CK_BYTE param_a[] = { 0x06, 0x07, 0x2a, 0x85, 0x03, 0x02, 0x02, 0x23, 0x01 };
+	CK_BYTE param_b[] = { 0x06, 0x07, 0x2a, 0x85, 0x03, 0x02, 0x02, 0x1e, 0x01 };
+	CK_BYTE subject[] = { 0x12, 0x34 }; // dummy
+	CK_BYTE id[] = { 123 } ; // dummy
+	CK_BBOOL bFalse = CK_FALSE;
+	CK_BBOOL bTrue = CK_TRUE;
+	CK_ATTRIBUTE pubAttribs[] = {
+		{ CKA_TOKEN, &bToken, sizeof(bToken) },
+		{ CKA_PRIVATE, &bPrivate, sizeof(bPrivate) },
+		{ CKA_ENCRYPT, &bFalse, sizeof(bFalse) },
+		{ CKA_VERIFY, &bTrue, sizeof(bTrue) },
+		{ CKA_WRAP, &bFalse, sizeof(bFalse) },
+		{ CKA_GOSTR3410_PARAMS, &param_a[0], sizeof(param_a) },
+		{ CKA_GOSTR3411_PARAMS, &param_b[0], sizeof(param_b) }
+	};
+	CK_ATTRIBUTE privAttribs[] = {
+		{ CKA_TOKEN, &bToken, sizeof(bToken) },
+		{ CKA_PRIVATE, &bPrivate, sizeof(bPrivate) },
+		{ CKA_SUBJECT, &subject[0], sizeof(subject) },
+		{ CKA_ID, &id[0], sizeof(id) },
+		{ CKA_SENSITIVE, &bTrue, sizeof(bTrue) },
+		{ CKA_DECRYPT, &bFalse, sizeof(bFalse) },
+		{ CKA_SIGN, &bTrue, sizeof(bTrue) },
+		{ CKA_UNWRAP, &bFalse, sizeof(bFalse) },
+		{ CKA_SENSITIVE, &bFalse, sizeof(bFalse) },
+		{ CKA_EXTRACTABLE, &bTrue, sizeof(bTrue) }
+	};
+
+	CK_OBJECT_HANDLE hPub = CK_INVALID_HANDLE;
+	hKey = CK_INVALID_HANDLE;
+	CK_RV rv;
+	rv = CRYPTOKI_F_PTR( C_GenerateKeyPair(hSession, &mechanism,
+			       pubAttribs, sizeof(pubAttribs)/sizeof(CK_ATTRIBUTE),
+			       privAttribs, sizeof(privAttribs)/sizeof(CK_ATTRIBUTE),
+			       &hPub, &hKey) );
+	if (hPub != CK_INVALID_HANDLE)
+	{
+		CRYPTOKI_F_PTR( C_DestroyObject(hSession, hPub) );
+	}
+	return rv;
+}
 #endif
 
-void SymmetricAlgorithmTests::aesWrapUnwrap(CK_MECHANISM_TYPE mechanismType, CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hKey)
+void SymmetricAlgorithmTests::aesWrapUnwrapGeneric(CK_MECHANISM_TYPE mechanismType, CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hKey)
 {
 	CK_MECHANISM mechanism = { mechanismType, NULL_PTR, 0 };
 	CK_BBOOL bFalse = CK_FALSE;
@@ -409,57 +524,61 @@ void SymmetricAlgorithmTests::aesWrapUnwrap(CK_MECHANISM_TYPE mechanismType, CK_
 	wrappedPtr = NULL_PTR;
 	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSession, hSecret) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
+}
 
-#ifdef HAVE_AES_KEY_WRAP_PAD
-	if (mechanismType != CKM_AES_KEY_WRAP_PAD) return;
-
-	CK_OBJECT_HANDLE hRsa;
-	hRsa = CK_INVALID_HANDLE;
-	rv = generateRsaPrivateKey(hSession, CK_TRUE, CK_TRUE, hRsa);
+void SymmetricAlgorithmTests::aesWrapUnwrapRsa(CK_MECHANISM_TYPE mechanismType, CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hKey)
+{
+	CK_MECHANISM mechanism = { mechanismType, NULL_PTR, 0 };
+	CK_BBOOL bFalse = CK_FALSE;
+	CK_BBOOL bTrue = CK_TRUE;
+	CK_OBJECT_HANDLE hPrk = CK_INVALID_HANDLE;
+	CK_RV rv = generateRsaPrivateKey(hSession, CK_TRUE, CK_TRUE, hPrk);
 	CPPUNIT_ASSERT(rv == CKR_OK);
-	CPPUNIT_ASSERT(hRsa != CK_INVALID_HANDLE);
+	CPPUNIT_ASSERT(hPrk != CK_INVALID_HANDLE);
 
 	CK_OBJECT_CLASS privateClass = CKO_PRIVATE_KEY;
-	CK_KEY_TYPE rsaKeyType = CKK_RSA;
-	CK_BYTE_PTR p2Ptr = NULL_PTR;
-	CK_ULONG p2Len = 0UL;
-	CK_ATTRIBUTE rsaAttribs[] = {
+	CK_KEY_TYPE keyType = CKK_RSA;
+	CK_BYTE_PTR prkAttrPtr = NULL_PTR;
+	CK_ULONG prkAttrLen = 0UL;
+	CK_ATTRIBUTE prkAttribs[] = {
 		{ CKA_CLASS, &privateClass, sizeof(privateClass) },
-		{ CKA_KEY_TYPE, &rsaKeyType, sizeof(rsaKeyType) },
+		{ CKA_KEY_TYPE, &keyType, sizeof(keyType) },
 		{ CKA_PRIME_2, NULL_PTR, 0UL }
 	};
 
-	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hRsa, rsaAttribs, sizeof(rsaAttribs)/sizeof(CK_ATTRIBUTE)) );
+	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hPrk, prkAttribs, sizeof(prkAttribs)/sizeof(CK_ATTRIBUTE)) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
 
-	CPPUNIT_ASSERT(rsaAttribs[0].ulValueLen == sizeof(CK_OBJECT_CLASS));
-	CPPUNIT_ASSERT(*(CK_OBJECT_CLASS*)rsaAttribs[0].pValue == CKO_PRIVATE_KEY);
-	CPPUNIT_ASSERT(rsaAttribs[1].ulValueLen == sizeof(CK_KEY_TYPE));
-	CPPUNIT_ASSERT(*(CK_KEY_TYPE*)rsaAttribs[1].pValue == CKK_RSA);
+	CPPUNIT_ASSERT(prkAttribs[0].ulValueLen == sizeof(CK_OBJECT_CLASS));
+	CPPUNIT_ASSERT(*(CK_OBJECT_CLASS*)prkAttribs[0].pValue == CKO_PRIVATE_KEY);
+	CPPUNIT_ASSERT(prkAttribs[1].ulValueLen == sizeof(CK_KEY_TYPE));
+	CPPUNIT_ASSERT(*(CK_KEY_TYPE*)prkAttribs[1].pValue == CKK_RSA);
 
-	p2Len = rsaAttribs[2].ulValueLen;
-	p2Ptr = (CK_BYTE_PTR) malloc(2 * p2Len);
-	CPPUNIT_ASSERT(p2Ptr != NULL_PTR);
-	rsaAttribs[2].pValue = p2Ptr;
-	rsaAttribs[2].ulValueLen = p2Len;
+	prkAttrLen = prkAttribs[2].ulValueLen;
+	prkAttrPtr = (CK_BYTE_PTR) malloc(2 * prkAttrLen);
+	CPPUNIT_ASSERT(prkAttrPtr != NULL_PTR);
+	prkAttribs[2].pValue = prkAttrPtr;
+	prkAttribs[2].ulValueLen = prkAttrLen;
 
-	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hRsa, rsaAttribs, sizeof(rsaAttribs)/sizeof(CK_ATTRIBUTE)) );
+	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hPrk, prkAttribs, sizeof(prkAttribs)/sizeof(CK_ATTRIBUTE)) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
-	CPPUNIT_ASSERT(rsaAttribs[2].ulValueLen == p2Len);
+	CPPUNIT_ASSERT(prkAttribs[2].ulValueLen == prkAttrLen);
 
-	rv = CRYPTOKI_F_PTR( C_WrapKey(hSession, &mechanism, hKey, hRsa, wrappedPtr, &wrappedLen) );
+	CK_BYTE_PTR wrappedPtr = NULL_PTR;
+	CK_ULONG wrappedLen = 0UL;
+	rv = CRYPTOKI_F_PTR( C_WrapKey(hSession, &mechanism, hKey, hPrk, wrappedPtr, &wrappedLen) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	wrappedPtr = (CK_BYTE_PTR) malloc(wrappedLen);
 	CPPUNIT_ASSERT(wrappedPtr != NULL_PTR);
-	rv = CRYPTOKI_F_PTR( C_WrapKey(hSession, &mechanism, hKey, hRsa, wrappedPtr, &wrappedLen) );
+	rv = CRYPTOKI_F_PTR( C_WrapKey(hSession, &mechanism, hKey, hPrk, wrappedPtr, &wrappedLen) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
 
-	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSession, hRsa) );
+	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSession, hPrk) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
 
-	CK_ATTRIBUTE nRsaAttribs[] = {
+	CK_ATTRIBUTE nPrkAttribs[] = {
 		{ CKA_CLASS, &privateClass, sizeof(privateClass) },
-		{ CKA_KEY_TYPE, &rsaKeyType, sizeof(rsaKeyType) },
+		{ CKA_KEY_TYPE, &keyType, sizeof(keyType) },
 		{ CKA_TOKEN, &bFalse, sizeof(bFalse) },
 		{ CKA_PRIVATE, &bTrue, sizeof(bTrue) },
 		{ CKA_DECRYPT, &bTrue, sizeof(bTrue) },
@@ -469,28 +588,113 @@ void SymmetricAlgorithmTests::aesWrapUnwrap(CK_MECHANISM_TYPE mechanismType, CK_
 		{ CKA_EXTRACTABLE, &bTrue, sizeof(bTrue) }
 	};
 
-	hRsa = CK_INVALID_HANDLE;
-	rv = CRYPTOKI_F_PTR( C_UnwrapKey(hSession, &mechanism, hKey, wrappedPtr, wrappedLen, nRsaAttribs, sizeof(nRsaAttribs)/sizeof(CK_ATTRIBUTE), &hRsa) );
+	hPrk = CK_INVALID_HANDLE;
+	rv = CRYPTOKI_F_PTR( C_UnwrapKey(hSession, &mechanism, hKey, wrappedPtr, wrappedLen, nPrkAttribs, sizeof(nPrkAttribs)/sizeof(CK_ATTRIBUTE), &hPrk) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
-	CPPUNIT_ASSERT(hRsa != CK_INVALID_HANDLE);
+	CPPUNIT_ASSERT(hPrk != CK_INVALID_HANDLE);
 
-	rsaAttribs[2].pValue = p2Ptr + p2Len;
-	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hRsa, rsaAttribs, sizeof(rsaAttribs)/sizeof(CK_ATTRIBUTE)) );
+	prkAttribs[2].pValue = prkAttrPtr + prkAttrLen;
+	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hPrk, prkAttribs, sizeof(prkAttribs)/sizeof(CK_ATTRIBUTE)) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
 
-	CPPUNIT_ASSERT(rsaAttribs[0].ulValueLen == sizeof(CK_OBJECT_CLASS));
-	CPPUNIT_ASSERT(*(CK_OBJECT_CLASS*)rsaAttribs[0].pValue == CKO_PRIVATE_KEY);
-	CPPUNIT_ASSERT(rsaAttribs[1].ulValueLen == sizeof(CK_KEY_TYPE));
-	CPPUNIT_ASSERT(*(CK_KEY_TYPE*)rsaAttribs[1].pValue == CKK_RSA);
-	CPPUNIT_ASSERT(rsaAttribs[2].ulValueLen == p2Len);
-	CPPUNIT_ASSERT(memcmp(p2Ptr, p2Ptr + p2Len, p2Len) == 0);
+	CPPUNIT_ASSERT(prkAttribs[0].ulValueLen == sizeof(CK_OBJECT_CLASS));
+	CPPUNIT_ASSERT(*(CK_OBJECT_CLASS*)prkAttribs[0].pValue == CKO_PRIVATE_KEY);
+	CPPUNIT_ASSERT(prkAttribs[1].ulValueLen == sizeof(CK_KEY_TYPE));
+	CPPUNIT_ASSERT(*(CK_KEY_TYPE*)prkAttribs[1].pValue == CKK_RSA);
+	CPPUNIT_ASSERT(prkAttribs[2].ulValueLen == prkAttrLen);
+	CPPUNIT_ASSERT(memcmp(prkAttrPtr, prkAttrPtr + prkAttrLen, prkAttrLen) == 0);
 
 	free(wrappedPtr);
-	free(p2Ptr);
-	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSession, hRsa) );
+	free(prkAttrPtr);
+	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSession, hPrk) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
-#endif
 }
+
+#ifdef WITH_GOST
+void SymmetricAlgorithmTests::aesWrapUnwrapGost(CK_MECHANISM_TYPE mechanismType, CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hKey)
+{
+	CK_MECHANISM mechanism = { mechanismType, NULL_PTR, 0 };
+	CK_BBOOL bFalse = CK_FALSE;
+	CK_BBOOL bTrue = CK_TRUE;
+	CK_OBJECT_HANDLE hPrk = CK_INVALID_HANDLE;
+	CK_RV rv = generateGostPrivateKey(hSession, CK_TRUE, CK_TRUE, hPrk);
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	CPPUNIT_ASSERT(hPrk != CK_INVALID_HANDLE);
+
+	CK_OBJECT_CLASS privateClass = CKO_PRIVATE_KEY;
+	CK_KEY_TYPE keyType = CKK_GOSTR3410;
+	CK_BYTE_PTR prkAttrPtr = NULL_PTR;
+	CK_ULONG prkAttrLen = 0UL;
+	CK_ATTRIBUTE prkAttribs[] = {
+		{ CKA_CLASS, &privateClass, sizeof(privateClass) },
+		{ CKA_KEY_TYPE, &keyType, sizeof(keyType) },
+		{ CKA_VALUE, NULL_PTR, 0UL }
+	};
+
+	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hPrk, prkAttribs, sizeof(prkAttribs)/sizeof(CK_ATTRIBUTE)) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	CPPUNIT_ASSERT(prkAttribs[0].ulValueLen == sizeof(CK_OBJECT_CLASS));
+	CPPUNIT_ASSERT(*(CK_OBJECT_CLASS*)prkAttribs[0].pValue == CKO_PRIVATE_KEY);
+	CPPUNIT_ASSERT(prkAttribs[1].ulValueLen == sizeof(CK_KEY_TYPE));
+	CPPUNIT_ASSERT(*(CK_KEY_TYPE*)prkAttribs[1].pValue == CKK_GOSTR3410);
+
+	prkAttrLen = prkAttribs[2].ulValueLen;
+	prkAttrPtr = (CK_BYTE_PTR) malloc(2 * prkAttrLen);
+	CPPUNIT_ASSERT(prkAttrPtr != NULL_PTR);
+	prkAttribs[2].pValue = prkAttrPtr;
+	prkAttribs[2].ulValueLen = prkAttrLen;
+
+	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hPrk, prkAttribs, sizeof(prkAttribs)/sizeof(CK_ATTRIBUTE)) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	CPPUNIT_ASSERT(prkAttribs[2].ulValueLen == prkAttrLen);
+
+	CK_BYTE_PTR wrappedPtr = NULL_PTR;
+	CK_ULONG wrappedLen = 0UL;
+	rv = CRYPTOKI_F_PTR( C_WrapKey(hSession, &mechanism, hKey, hPrk, wrappedPtr, &wrappedLen) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	wrappedPtr = (CK_BYTE_PTR) malloc(wrappedLen);
+	CPPUNIT_ASSERT(wrappedPtr != NULL_PTR);
+	rv = CRYPTOKI_F_PTR( C_WrapKey(hSession, &mechanism, hKey, hPrk, wrappedPtr, &wrappedLen) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSession, hPrk) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	CK_ATTRIBUTE nPrkAttribs[] = {
+		{ CKA_CLASS, &privateClass, sizeof(privateClass) },
+		{ CKA_KEY_TYPE, &keyType, sizeof(keyType) },
+		{ CKA_TOKEN, &bFalse, sizeof(bFalse) },
+		{ CKA_PRIVATE, &bTrue, sizeof(bTrue) },
+		{ CKA_DECRYPT, &bTrue, sizeof(bTrue) },
+		{ CKA_SIGN, &bFalse,sizeof(bFalse) },
+		{ CKA_UNWRAP, &bTrue, sizeof(bTrue) },
+		{ CKA_SENSITIVE, &bFalse, sizeof(bFalse) },
+		{ CKA_EXTRACTABLE, &bTrue, sizeof(bTrue) }
+	};
+
+	hPrk = CK_INVALID_HANDLE;
+	rv = CRYPTOKI_F_PTR( C_UnwrapKey(hSession, &mechanism, hKey, wrappedPtr, wrappedLen, nPrkAttribs, sizeof(nPrkAttribs)/sizeof(CK_ATTRIBUTE), &hPrk) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	CPPUNIT_ASSERT(hPrk != CK_INVALID_HANDLE);
+
+	prkAttribs[2].pValue = prkAttrPtr + prkAttrLen;
+	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hPrk, prkAttribs, sizeof(prkAttribs)/sizeof(CK_ATTRIBUTE)) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	CPPUNIT_ASSERT(prkAttribs[0].ulValueLen == sizeof(CK_OBJECT_CLASS));
+	CPPUNIT_ASSERT(*(CK_OBJECT_CLASS*)prkAttribs[0].pValue == CKO_PRIVATE_KEY);
+	CPPUNIT_ASSERT(prkAttribs[1].ulValueLen == sizeof(CK_KEY_TYPE));
+	CPPUNIT_ASSERT(*(CK_KEY_TYPE*)prkAttribs[1].pValue == CKK_GOSTR3410);
+	CPPUNIT_ASSERT(prkAttribs[2].ulValueLen == prkAttrLen);
+	CPPUNIT_ASSERT(memcmp(prkAttrPtr, prkAttrPtr + prkAttrLen, prkAttrLen) == 0);
+
+	free(wrappedPtr);
+	free(prkAttrPtr);
+	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSession, hPrk) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+}
+#endif
 
 void SymmetricAlgorithmTests::testAesEncryptDecrypt()
 {
@@ -537,11 +741,15 @@ void SymmetricAlgorithmTests::testAesEncryptDecrypt()
 	encryptDecrypt(CKM_AES_CBC_PAD,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1);
 	encryptDecrypt(CKM_AES_CBC_PAD,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
 	encryptDecrypt(CKM_AES_CBC,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
-	encryptDecrypt(CKM_AES_CBC,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
 	encryptDecrypt(CKM_AES_CBC,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1, false);
-	encryptDecrypt(CKM_AES_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST, true, false);
-	encryptDecrypt(CKM_AES_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST, true, false);
-	encryptDecrypt(CKM_AES_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1, false, false);
+	encryptDecrypt(CKM_AES_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
+	encryptDecrypt(CKM_AES_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1, false);
+	encryptDecrypt(CKM_AES_CTR,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST-1);
+	encryptDecrypt(CKM_AES_CTR,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1);
+	encryptDecrypt(CKM_AES_CTR,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
+	encryptDecrypt(CKM_AES_GCM,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST-1);
+	encryptDecrypt(CKM_AES_GCM,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1);
+	encryptDecrypt(CKM_AES_GCM,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
 }
 
 void SymmetricAlgorithmTests::testAesWrapUnwrap()
@@ -572,9 +780,18 @@ void SymmetricAlgorithmTests::testAesWrapUnwrap()
 	rv = generateAesKey(hSession,IN_SESSION,IS_PUBLIC,hKey);
 	CPPUNIT_ASSERT(rv == CKR_OK);
 
-	aesWrapUnwrap(CKM_AES_KEY_WRAP, hSession, hKey);
+	aesWrapUnwrapGeneric(CKM_AES_KEY_WRAP, hSession, hKey);
+	aesWrapUnwrapRsa(CKM_AES_KEY_WRAP, hSession, hKey);
+#ifdef WITH_GOST
+	aesWrapUnwrapGost(CKM_AES_KEY_WRAP, hSession, hKey);
+#endif
+
 #ifdef HAVE_AES_KEY_WRAP_PAD
-	aesWrapUnwrap(CKM_AES_KEY_WRAP_PAD, hSession, hKey);
+	aesWrapUnwrapGeneric(CKM_AES_KEY_WRAP_PAD, hSession, hKey);
+	aesWrapUnwrapRsa(CKM_AES_KEY_WRAP_PAD, hSession, hKey);
+#ifdef WITH_GOST
+	aesWrapUnwrapGost(CKM_AES_KEY_WRAP_PAD, hSession, hKey);
+#endif
 #endif
 }
 
@@ -625,11 +842,9 @@ void SymmetricAlgorithmTests::testDesEncryptDecrypt()
 	encryptDecrypt(CKM_DES_CBC_PAD,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1);
 	encryptDecrypt(CKM_DES_CBC_PAD,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
 	encryptDecrypt(CKM_DES_CBC,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
-	encryptDecrypt(CKM_DES_CBC,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
 	encryptDecrypt(CKM_DES_CBC,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1, false);
-	encryptDecrypt(CKM_DES_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST, true, false);
-	encryptDecrypt(CKM_DES_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST, true, false);
-	encryptDecrypt(CKM_DES_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1, false, false);
+	encryptDecrypt(CKM_DES_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
+	encryptDecrypt(CKM_DES_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1, false);
 
 	CK_OBJECT_HANDLE hKey2 = CK_INVALID_HANDLE;
 
@@ -637,15 +852,13 @@ void SymmetricAlgorithmTests::testDesEncryptDecrypt()
 	rv = generateDes2Key(hSessionRW,IN_SESSION,IS_PUBLIC,hKey2);
 	CPPUNIT_ASSERT(rv == CKR_OK);
 
-	encryptDecrypt(CKM_DES3_CBC_PAD,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST-1);
-	encryptDecrypt(CKM_DES3_CBC_PAD,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1);
-	encryptDecrypt(CKM_DES3_CBC_PAD,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
-	encryptDecrypt(CKM_DES3_CBC,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
-	encryptDecrypt(CKM_DES3_CBC,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
-	encryptDecrypt(CKM_DES3_CBC,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1, false);
-	encryptDecrypt(CKM_DES3_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST, true, false);
-	encryptDecrypt(CKM_DES3_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST, true, false);
-	encryptDecrypt(CKM_DES3_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1, false, false);
+	encryptDecrypt(CKM_DES3_CBC_PAD,blockSize,hSessionRO,hKey2,blockSize*NR_OF_BLOCKS_IN_TEST-1);
+	encryptDecrypt(CKM_DES3_CBC_PAD,blockSize,hSessionRO,hKey2,blockSize*NR_OF_BLOCKS_IN_TEST+1);
+	encryptDecrypt(CKM_DES3_CBC_PAD,blockSize,hSessionRO,hKey2,blockSize*NR_OF_BLOCKS_IN_TEST);
+	encryptDecrypt(CKM_DES3_CBC,blockSize,hSessionRO,hKey2,blockSize*NR_OF_BLOCKS_IN_TEST);
+	encryptDecrypt(CKM_DES3_CBC,blockSize,hSessionRO,hKey2,blockSize*NR_OF_BLOCKS_IN_TEST+1, false);
+	encryptDecrypt(CKM_DES3_ECB,blockSize,hSessionRO,hKey2,blockSize*NR_OF_BLOCKS_IN_TEST);
+	encryptDecrypt(CKM_DES3_ECB,blockSize,hSessionRO,hKey2,blockSize*NR_OF_BLOCKS_IN_TEST+1, false);
 #endif
 
 	CK_OBJECT_HANDLE hKey3 = CK_INVALID_HANDLE;
@@ -654,15 +867,13 @@ void SymmetricAlgorithmTests::testDesEncryptDecrypt()
 	rv = generateDes3Key(hSessionRW,IN_SESSION,IS_PUBLIC,hKey3);
 	CPPUNIT_ASSERT(rv == CKR_OK);
 
-	encryptDecrypt(CKM_DES3_CBC_PAD,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST-1);
-	encryptDecrypt(CKM_DES3_CBC_PAD,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1);
-	encryptDecrypt(CKM_DES3_CBC_PAD,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
-	encryptDecrypt(CKM_DES3_CBC,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
-	encryptDecrypt(CKM_DES3_CBC,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST);
-	encryptDecrypt(CKM_DES3_CBC,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1, false);
-	encryptDecrypt(CKM_DES3_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST, true, false);
-	encryptDecrypt(CKM_DES3_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST, true, false);
-	encryptDecrypt(CKM_DES3_ECB,blockSize,hSessionRO,hKey,blockSize*NR_OF_BLOCKS_IN_TEST+1, false, false);
+	encryptDecrypt(CKM_DES3_CBC_PAD,blockSize,hSessionRO,hKey3,blockSize*NR_OF_BLOCKS_IN_TEST-1);
+	encryptDecrypt(CKM_DES3_CBC_PAD,blockSize,hSessionRO,hKey3,blockSize*NR_OF_BLOCKS_IN_TEST+1);
+	encryptDecrypt(CKM_DES3_CBC_PAD,blockSize,hSessionRO,hKey3,blockSize*NR_OF_BLOCKS_IN_TEST);
+	encryptDecrypt(CKM_DES3_CBC,blockSize,hSessionRO,hKey3,blockSize*NR_OF_BLOCKS_IN_TEST);
+	encryptDecrypt(CKM_DES3_CBC,blockSize,hSessionRO,hKey3,blockSize*NR_OF_BLOCKS_IN_TEST+1, false);
+	encryptDecrypt(CKM_DES3_ECB,blockSize,hSessionRO,hKey3,blockSize*NR_OF_BLOCKS_IN_TEST);
+	encryptDecrypt(CKM_DES3_ECB,blockSize,hSessionRO,hKey3,blockSize*NR_OF_BLOCKS_IN_TEST+1, false);
 }
 
 void SymmetricAlgorithmTests::testNullTemplate()
@@ -690,6 +901,9 @@ void SymmetricAlgorithmTests::testNullTemplate()
 
 	rv = CRYPTOKI_F_PTR( C_GenerateKey(hSession, &mechanism1, NULL_PTR, 0, &hKey) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	rv = CRYPTOKI_F_PTR( C_GenerateKey(hSession, &mechanism1, NULL_PTR, 1, &hKey) );
+	CPPUNIT_ASSERT(rv == CKR_ARGUMENTS_BAD);
 
 	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSession, hKey) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
@@ -842,10 +1056,238 @@ void SymmetricAlgorithmTests::testCheckValue()
 			   &hKey) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
 
+	checkAttrib[0].ulValueLen = sizeof(pCheckValue);
 	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hKey, checkAttrib, 1) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	CPPUNIT_ASSERT(checkAttrib[0].ulValueLen == 3);
 
 	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSession, hKey) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
+}
+
+void SymmetricAlgorithmTests::testAesCtrOverflow()
+{
+	CK_RV rv;
+	CK_SESSION_HANDLE hSession;
+
+	// Just make sure that we finalize any previous tests
+	CRYPTOKI_F_PTR( C_Finalize(NULL_PTR) );
+
+	// Initialize the library and start the test.
+	rv = CRYPTOKI_F_PTR( C_Initialize(NULL_PTR) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// Open read-write session
+	rv = CRYPTOKI_F_PTR( C_OpenSession(m_initializedTokenSlotID, CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL_PTR, NULL_PTR, &hSession) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// Login USER into the session so we can create a private objects
+	rv = CRYPTOKI_F_PTR( C_Login(hSession,CKU_USER,m_userPin1,m_userPin1Length) );
+	CPPUNIT_ASSERT(rv==CKR_OK);
+
+	CK_OBJECT_HANDLE hKey = CK_INVALID_HANDLE;
+
+	// Generate a session keys.
+	rv = generateAesKey(hSession,IN_SESSION,IS_PUBLIC,hKey);
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	CK_MECHANISM mechanism = { CKM_AES_CTR, NULL_PTR, 0 };
+	CK_AES_CTR_PARAMS ctrParams =
+	{
+		2,
+		{
+			0x00, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01
+		}
+	};
+	mechanism.pParameter = &ctrParams;
+	mechanism.ulParameterLen = sizeof(ctrParams);
+
+	CK_BYTE plainText[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+				0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+				0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+				0x00 };
+	std::vector<CK_BYTE> vEncryptedData;
+	std::vector<CK_BYTE> vEncryptedDataParted;
+	std::vector<CK_BYTE> vDecryptedData;
+	std::vector<CK_BYTE> vDecryptedDataParted;
+	CK_ULONG ulEncryptedDataLen;
+	CK_ULONG ulEncryptedPartLen;
+	CK_ULONG ulDataLen;
+	CK_ULONG ulDataPartLen;
+
+	// Single-part encryption
+	rv = CRYPTOKI_F_PTR( C_EncryptInit(hSession,&mechanism,hKey) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	rv = CRYPTOKI_F_PTR( C_Encrypt(hSession,plainText,sizeof(plainText),NULL_PTR,&ulEncryptedDataLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_DATA_LEN_RANGE, rv );
+	rv = CRYPTOKI_F_PTR( C_EncryptInit(hSession,&mechanism,hKey) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	rv = CRYPTOKI_F_PTR( C_Encrypt(hSession,plainText,sizeof(plainText)-1,NULL_PTR,&ulEncryptedDataLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	vEncryptedData.resize(ulEncryptedDataLen);
+	rv = CRYPTOKI_F_PTR( C_Encrypt(hSession,plainText,sizeof(plainText)-1,&vEncryptedData.front(),&ulEncryptedDataLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	vEncryptedData.resize(ulEncryptedDataLen);
+
+	// Multi-part encryption
+	rv = CRYPTOKI_F_PTR( C_EncryptInit(hSession,&mechanism,hKey) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	rv = CRYPTOKI_F_PTR( C_EncryptUpdate(hSession,plainText,sizeof(plainText)-1,NULL_PTR,&ulEncryptedPartLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	vEncryptedDataParted.resize(ulEncryptedPartLen);
+	rv = CRYPTOKI_F_PTR( C_EncryptUpdate(hSession,plainText,sizeof(plainText)-1,&vEncryptedDataParted.front(),&ulEncryptedPartLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	vEncryptedDataParted.resize(ulEncryptedPartLen);
+	rv = CRYPTOKI_F_PTR( C_EncryptUpdate(hSession,plainText,1,NULL_PTR,&ulEncryptedPartLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_DATA_LEN_RANGE, rv );
+
+	// Single-part decryption
+	rv = CRYPTOKI_F_PTR( C_DecryptInit(hSession,&mechanism,hKey) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	rv = CRYPTOKI_F_PTR( C_Decrypt(hSession,&vEncryptedData.front(),vEncryptedData.size()+1,NULL_PTR,&ulDataLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_ENCRYPTED_DATA_LEN_RANGE, rv );
+	rv = CRYPTOKI_F_PTR( C_DecryptInit(hSession,&mechanism,hKey) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	rv = CRYPTOKI_F_PTR( C_Decrypt(hSession,&vEncryptedData.front(),vEncryptedData.size(),NULL_PTR,&ulDataLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	vDecryptedData.resize(ulDataLen);
+	rv = CRYPTOKI_F_PTR( C_Decrypt(hSession,&vEncryptedData.front(),vEncryptedData.size(),&vDecryptedData.front(),&ulDataLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	vDecryptedData.resize(ulDataLen);
+
+	// Multi-part decryption
+	rv = CRYPTOKI_F_PTR( C_DecryptInit(hSession,&mechanism,hKey) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	rv = CRYPTOKI_F_PTR( C_DecryptUpdate(hSession,&vEncryptedData.front(),vEncryptedData.size(),NULL_PTR,&ulDataPartLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	vDecryptedDataParted.resize(ulDataPartLen);
+	rv = CRYPTOKI_F_PTR( C_DecryptUpdate(hSession,&vEncryptedData.front(),vEncryptedData.size(),&vDecryptedDataParted.front(),&ulDataPartLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	vDecryptedDataParted.resize(ulDataPartLen);
+	rv = CRYPTOKI_F_PTR( C_DecryptUpdate(hSession,&vEncryptedData.front(),1,NULL_PTR,&ulDataPartLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_ENCRYPTED_DATA_LEN_RANGE, rv );
+}
+
+void SymmetricAlgorithmTests::testGenericKey()
+{
+	CK_RV rv;
+	CK_SESSION_HANDLE hSession;
+
+	// Just make sure that we finalize any previous tests
+	CRYPTOKI_F_PTR( C_Finalize(NULL_PTR) );
+
+	// Initialize the library and start the test.
+	rv = CRYPTOKI_F_PTR( C_Initialize(NULL_PTR) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// Open read-write session
+	rv = CRYPTOKI_F_PTR( C_OpenSession(m_initializedTokenSlotID, CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL_PTR, NULL_PTR, &hSession) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// Login USER into the session so we can create a private objects
+	rv = CRYPTOKI_F_PTR( C_Login(hSession,CKU_USER,m_userPin1,m_userPin1Length) );
+	CPPUNIT_ASSERT(rv==CKR_OK);
+
+	CK_OBJECT_HANDLE hKey = CK_INVALID_HANDLE;
+
+	// Generate a session key.
+	rv = generateGenericKey(hSession,IN_SESSION,IS_PUBLIC,hKey);
+	CPPUNIT_ASSERT(rv == CKR_OK);
+}
+
+void SymmetricAlgorithmTests::testEncDecFinalNULLValidation()
+{
+	CK_RV rv;
+	CK_SESSION_HANDLE hSession;
+
+	// Just make sure that we finalize any previous tests
+	CRYPTOKI_F_PTR( C_Finalize(NULL_PTR) );
+
+	// Initialize the library and start the test.
+	rv = CRYPTOKI_F_PTR( C_Initialize(NULL_PTR) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// Open read-write session
+	rv = CRYPTOKI_F_PTR( C_OpenSession(m_initializedTokenSlotID, CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL_PTR, NULL_PTR, &hSession) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// Login USER into the sessions so we can create a private objects
+	rv = CRYPTOKI_F_PTR( C_Login(hSession,CKU_USER,m_userPin1,m_userPin1Length) );
+	CPPUNIT_ASSERT(rv==CKR_OK);
+
+	CK_OBJECT_HANDLE hKey = CK_INVALID_HANDLE;
+
+	// Generate all combinations of session/token keys.
+	rv = generateAesKey(hSession,IN_SESSION,IS_PUBLIC,hKey);
+
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	
+	CK_MECHANISM mechanism = { CKM_AES_CTR, NULL_PTR, 0 };
+	CK_AES_CTR_PARAMS ctrParams =
+	{
+		2,
+		{
+			0x00, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01
+		}
+	};
+	mechanism.pParameter = &ctrParams;
+	mechanism.ulParameterLen = sizeof(ctrParams);
+	CK_BYTE plainText[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+				0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+				0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+				0x00 };
+	std::vector<CK_BYTE> vEncryptedData;
+	std::vector<CK_BYTE> vEncryptedDataParted;
+	std::vector<CK_BYTE> vDecryptedData;
+	std::vector<CK_BYTE> vDecryptedDataParted;
+	CK_ULONG ulEncryptedDataLen;
+	CK_ULONG ulEncryptedPartLen;
+	CK_ULONG ulDecryptedPartLen;
+	CK_ULONG ulDataPartLen;
+
+	// Single-part encryption
+	rv = CRYPTOKI_F_PTR( C_EncryptInit(hSession,&mechanism,hKey) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	rv = CRYPTOKI_F_PTR( C_Encrypt(hSession,plainText,sizeof(plainText)-1,NULL_PTR,&ulEncryptedDataLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	vEncryptedData.resize(ulEncryptedDataLen);
+	rv = CRYPTOKI_F_PTR( C_Encrypt(hSession,plainText,sizeof(plainText)-1,&vEncryptedData.front(),&ulEncryptedDataLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	vEncryptedData.resize(ulEncryptedDataLen);
+
+	// Multi-part encryption
+	rv = CRYPTOKI_F_PTR( C_EncryptInit(hSession,&mechanism,hKey) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	rv = CRYPTOKI_F_PTR( C_EncryptUpdate(hSession,plainText,sizeof(plainText)-1,NULL_PTR,&ulEncryptedPartLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	vEncryptedDataParted.resize(ulEncryptedPartLen);
+	rv = CRYPTOKI_F_PTR( C_EncryptUpdate(hSession,plainText,sizeof(plainText)-1,&vEncryptedDataParted.front(),&ulEncryptedPartLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+
+	// Test input validation
+	rv = CRYPTOKI_F_PTR( C_EncryptFinal(hSession, NULL_PTR, NULL_PTR) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_ARGUMENTS_BAD, rv );
+	ulEncryptedPartLen = 0;
+	rv = CRYPTOKI_F_PTR( C_EncryptFinal(hSession, NULL_PTR, &ulEncryptedPartLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OPERATION_NOT_INITIALIZED, rv );
+
+	// Multi-part decryption
+	rv = CRYPTOKI_F_PTR( C_DecryptInit(hSession,&mechanism,hKey) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	rv = CRYPTOKI_F_PTR( C_DecryptUpdate(hSession,&vEncryptedData.front(),vEncryptedData.size(),NULL_PTR,&ulDataPartLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	vDecryptedDataParted.resize(ulDataPartLen);
+	rv = CRYPTOKI_F_PTR( C_DecryptUpdate(hSession,&vEncryptedData.front(),vEncryptedData.size(),&vDecryptedDataParted.front(),&ulDataPartLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OK, rv );
+	
+	// Test input validation
+	rv = CRYPTOKI_F_PTR( C_DecryptFinal(hSession, NULL_PTR, NULL_PTR) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_ARGUMENTS_BAD, rv );
+	ulDecryptedPartLen = 0;
+	rv = CRYPTOKI_F_PTR( C_DecryptFinal(hSession, NULL_PTR, &ulDecryptedPartLen) );
+	CPPUNIT_ASSERT_EQUAL( (CK_RV)CKR_OPERATION_NOT_INITIALIZED, rv );
+
+	CRYPTOKI_F_PTR( C_Finalize(NULL_PTR) );
 }

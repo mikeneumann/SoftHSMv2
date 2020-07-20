@@ -2,14 +2,14 @@
 #                #
 #    Version     #
 #                #
-################
+##################
 
 # Program version
 
 define([SOFTHSM_VERSION_MAJOR], [2])
-define([SOFTHSM_VERSION_MINOR], [3])
-define([SOFTHSM_VERSION_FIX], [0])
-define([PACKAGE_SUFFIX], [rc1])
+define([SOFTHSM_VERSION_MINOR], [6])
+define([SOFTHSM_VERSION_FIX], [1])
+define([PACKAGE_SUFFIX], [])
 
 # Library version
 
@@ -20,7 +20,7 @@ define([PACKAGE_SUFFIX], [rc1])
 
 define([SOFTHSM_VERSION_CURRENT], [2])
 define([SOFTHSM_VERSION_AGE], [1])
-define([SOFTHSM_VERSION_REVISION], [2])
+define([SOFTHSM_VERSION_REVISION], [5])
 
 ##################
 #                #
@@ -44,6 +44,7 @@ AC_SUBST(VERSION_INFO)
 # Checks for compilers
 AC_PROG_CC
 AC_PROG_CXX
+PKG_PROG_PKG_CONFIG
 
 # Compiler flags
 ACX_PEDANTIC
@@ -116,6 +117,9 @@ ACX_VISIBILITY
 
 # If we should install the p11-kit module
 ACX_P11KIT
+
+# cppunit settings
+ACX_CPPUNIT
 
 # Set full directory paths
 full_sysconfdir=`eval eval eval eval eval echo "${sysconfdir}" | sed "s#NONE#${prefix}#" | sed "s#NONE#${ac_default_prefix}#"`
@@ -211,6 +215,8 @@ AC_CONFIG_FILES([
 	src/lib/test/Makefile
 	src/lib/test/softhsm2.conf
 	src/lib/test/softhsm2-alt.conf
+	src/lib/test/softhsm2-reset-on-fork.conf
+	src/lib/test/softhsm2-mech.conf
 	src/lib/test/tokens/dummy
 	src/bin/Makefile
 	src/bin/common/Makefile

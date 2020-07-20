@@ -1,9 +1,9 @@
 MAINTAINERCLEANFILES = 		$(srcdir)/Makefile.in
 
-AM_CPPFLAGS = 			-I$(srcdir)/../common \
-				-I$(srcdir)/../cryptoki_compat \
+AM_CPPFLAGS =			-I$(srcdir)/.. \
+				-I$(srcdir)/../common \
 				-I$(srcdir)/../data_mgr \
-				-I$(srcdir)/.. \
+				-I$(srcdir)/../pkcs11 \
 				@CRYPTO_INCLUDES@
 
 noinst_LTLIBRARIES =		libsofthsm_crypto.la
@@ -11,6 +11,7 @@ libsofthsm_crypto_la_SOURCES =	AESKey.cpp \
 				AsymmetricAlgorithm.cpp \
 				AsymmetricKeyPair.cpp \
 				CryptoFactory.cpp \
+				DerUtil.cpp \
 				DESKey.cpp \
 				DHParameters.cpp \
 				DHPublicKey.cpp \
@@ -21,6 +22,8 @@ libsofthsm_crypto_la_SOURCES =	AESKey.cpp \
 				ECParameters.cpp \
 				ECPublicKey.cpp \
 				ECPrivateKey.cpp \
+				EDPublicKey.cpp \
+				EDPrivateKey.cpp \
 				GOSTPublicKey.cpp \
 				GOSTPrivateKey.cpp \
 				HashAlgorithm.cpp \
@@ -34,7 +37,9 @@ libsofthsm_crypto_la_LIBADD =	@CRYPTO_LIBS@
 
 SUBDIRS =			test
 
-EXTRA_DIST =			$(srcdir)/*.h $(srcdir)/*.cpp
+EXTRA_DIST =			$(srcdir)/CMakeLists.txt \
+				$(srcdir)/*.h \
+				$(srcdir)/*.cpp
 
 # Compile with support of OpenSSL
 if WITH_OPENSSL
@@ -55,14 +60,20 @@ libsofthsm_crypto_la_SOURCES +=	OSSLAES.cpp \
 				OSSLECKeyPair.cpp \
 				OSSLECPrivateKey.cpp \
 				OSSLECPublicKey.cpp \
+				OSSLEDDSA.cpp \
+				OSSLEDKeyPair.cpp \
+				OSSLEDPrivateKey.cpp \
+				OSSLEDPublicKey.cpp \
 				OSSLEVPHashAlgorithm.cpp \
 				OSSLEVPMacAlgorithm.cpp \
+				OSSLEVPCMacAlgorithm.cpp \
 				OSSLEVPSymmetricAlgorithm.cpp \
 				OSSLGOST.cpp \
 				OSSLGOSTKeyPair.cpp \
 				OSSLGOSTPrivateKey.cpp \
 				OSSLGOSTPublicKey.cpp \
 				OSSLGOSTR3411.cpp \
+				OSSLCMAC.cpp \
 				OSSLHMAC.cpp \
 				OSSLMD5.cpp \
 				OSSLRNG.cpp \
@@ -99,13 +110,17 @@ libsofthsm_crypto_la_SOURCES +=	BotanAES.cpp \
 				BotanECDSAKeyPair.cpp \
 				BotanECDSAPrivateKey.cpp \
 				BotanECDSAPublicKey.cpp \
+				BotanEDDSA.cpp \
+				BotanEDKeyPair.cpp \
+				BotanEDPrivateKey.cpp \
+				BotanEDPublicKey.cpp \
 				BotanGOST.cpp \
 				BotanGOSTKeyPair.cpp \
 				BotanGOSTPrivateKey.cpp \
 				BotanGOSTPublicKey.cpp \
 				BotanGOSTR3411.cpp \
 				BotanHashAlgorithm.cpp \
-				BotanHMAC.cpp \
+				BotanMAC.cpp \
 				BotanMacAlgorithm.cpp \
 				BotanMD5.cpp \
 				BotanRNG.cpp \
@@ -119,5 +134,6 @@ libsofthsm_crypto_la_SOURCES +=	BotanAES.cpp \
 				BotanSHA384.cpp \
 				BotanSHA512.cpp \
 				BotanSymmetricAlgorithm.cpp \
-				BotanUtil.cpp
+				BotanUtil.cpp \
+				Botan_ecb.cpp
 endif

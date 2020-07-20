@@ -42,6 +42,7 @@
 #include "OSSLSHA256.h"
 #include "OSSLSHA384.h"
 #include "OSSLSHA512.h"
+#include "OSSLCMAC.h"
 #include "OSSLHMAC.h"
 #include "OSSLRSA.h"
 #include "OSSLDSA.h"
@@ -53,6 +54,9 @@
 #ifdef WITH_GOST
 #include "OSSLGOSTR3411.h"
 #include "OSSLGOST.h"
+#endif
+#ifdef WITH_EDDSA
+#include "OSSLEDDSA.h"
 #endif
 
 #include <algorithm>
@@ -73,6 +77,7 @@ bool OSSLCryptoFactory::FipsSelfTestStatus = false;
 
 static unsigned nlocks;
 static Mutex** locks;
+static bool ossl_shutdown;
 
 // Mutex callback
 void lock_callback(int mode, int n, const char* file, int line)
@@ -97,6 +102,26 @@ void lock_callback(int mode, int n, const char* file, int line)
 	}
 }
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+void ossl_factory_shutdown(void)
+{
+	/*
+	 * As of 1.1.0, OpenSSL registers its own atexit() handler
+	 * to call OPENSSL_cleanup(). If our own atexit() handler
+	 * subsequently tries to, for example, unreference an
+	 * ENGINE, then it'll crash or deadlock with a use-after-free.
+	 *
+	 * This hook into the OpenSSL_atexit() handlers will get called
+	 * when OPENSSL_cleanup() is called, and sets a flag which
+	 * prevents any further touching of OpenSSL objects — which
+	 * would otherwise happen fairly much immediately thereafter
+	 * when our own OSSLCryptoFactory destructor gets called by
+	 * the C++ runtime's own atexit() handler.
+	 */
+	ossl_shutdown = true;
+}
+#endif
+
 // Constructor
 OSSLCryptoFactory::OSSLCryptoFactory()
 {
@@ -107,7 +132,18 @@ OSSLCryptoFactory::OSSLCryptoFactory()
 	{
 		locks[i] = MutexFactory::i()->getMutex();
 	}
-	CRYPTO_set_locking_callback(lock_callback);
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+	setLockingCallback = false;
+	if (CRYPTO_get_locking_callback() == NULL)
+	{
+		CRYPTO_set_locking_callback(lock_callback);
+		setLockingCallback = true;
+	}
+#else
+	// Mustn't dereference engines after OpenSSL itself has shut down
+	OPENSSL_atexit(ossl_factory_shutdown);
+#endif
 
 #ifdef WITH_FIPS
 	// Already in FIPS mode on reenter (avoiding selftests)
@@ -129,15 +165,40 @@ OSSLCryptoFactory::OSSLCryptoFactory()
 	// Initialise OpenSSL
 	OpenSSL_add_all_algorithms();
 
+#if !( OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER) )
+	// Make sure RDRAND is loaded first
+	ENGINE_load_rdrand();
+#endif
+	// Locate the engine
+	rdrand_engine = ENGINE_by_id("rdrand");
+	// Use RDRAND if available
+	if (rdrand_engine != NULL)
+	{
+		// Initialize RDRAND engine
+		if (!ENGINE_init(rdrand_engine))
+		{
+			WARNING_MSG("ENGINE_init returned %lu\n", ERR_get_error());
+		}
+		// Set RDRAND engine as the default for RAND_ methods
+		else if (!ENGINE_set_default(rdrand_engine, ENGINE_METHOD_RAND))
+		{
+			WARNING_MSG("ENGINE_set_default returned %lu\n", ERR_get_error());
+		}
+	}
+
 	// Initialise the one-and-only RNG
 	rng = new OSSLRNG();
 
 #ifdef WITH_GOST
 	// Load engines
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
 	ENGINE_load_builtin_engines();
 #else
 	OPENSSL_init_crypto(OPENSSL_INIT_ENGINE_ALL_BUILTIN |
+			    OPENSSL_INIT_ENGINE_RDRAND |
+			    OPENSSL_INIT_LOAD_CRYPTO_STRINGS |
+			    OPENSSL_INIT_ADD_ALL_CIPHERS |
+			    OPENSSL_INIT_ADD_ALL_DIGESTS |
 			    OPENSSL_INIT_LOAD_CONFIG, NULL);
 #endif
 
@@ -189,21 +250,35 @@ err:
 // Destructor
 OSSLCryptoFactory::~OSSLCryptoFactory()
 {
-#ifdef WITH_GOST
-	// Finish the GOST engine
-	if (eg != NULL)
+	// Don't do this if OPENSSL_cleanup() has already happened
+	if (!ossl_shutdown)
 	{
-		ENGINE_finish(eg);
-		ENGINE_free(eg);
-		eg = NULL;
-	}
+#ifdef WITH_GOST
+		// Finish the GOST engine
+		if (eg != NULL)
+		{
+			ENGINE_finish(eg);
+			ENGINE_free(eg);
+			eg = NULL;
+		}
 #endif
 
+		// Finish the rd_rand engine
+		ENGINE_finish(rdrand_engine);
+		ENGINE_free(rdrand_engine);
+		rdrand_engine = NULL;
+
+		// Recycle locks
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+		if (setLockingCallback)
+		{
+			CRYPTO_set_locking_callback(NULL);
+		}
+#endif
+	}
 	// Destroy the one-and-only RNG
 	delete rng;
 
-	// Recycle locks
-	CRYPTO_set_locking_callback(NULL);
 	for (unsigned i = 0; i < nlocks; i++)
 	{
 		MutexFactory::i()->recycleMutex(locks[i]);
@@ -277,6 +352,10 @@ AsymmetricAlgorithm* OSSLCryptoFactory::getAsymmetricAlgorithm(AsymAlgo::Type al
 		case AsymAlgo::GOST:
 			return new OSSLGOST();
 #endif
+#ifdef WITH_EDDSA
+		case AsymAlgo::EDDSA:
+			return new OSSLEDDSA();
+#endif
 		default:
 			// No algorithm implementation is available
 			ERROR_MSG("Unknown algorithm '%i'", algorithm);
@@ -341,6 +420,10 @@ MacAlgorithm* OSSLCryptoFactory::getMacAlgorithm(MacAlgo::Type algorithm)
 		case MacAlgo::HMAC_GOST:
 			return new OSSLHMACGOSTR3411();
 #endif
+		case MacAlgo::CMAC_DES:
+			return new OSSLCMACDES();
+		case MacAlgo::CMAC_AES:
+			return new OSSLCMACAES();
 		default:
 			// No algorithm implementation is available
 			ERROR_MSG("Unknown algorithm '%i'", algorithm);

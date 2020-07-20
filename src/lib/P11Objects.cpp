@@ -75,6 +75,7 @@ bool P11Object::init(OSObject *inobject)
 	P11Attribute* attrModifiable = new P11AttrModifiable(osobject);
 	P11Attribute* attrLabel = new P11AttrLabel(osobject);
 	P11Attribute* attrCopyable = new P11AttrCopyable(osobject);
+	P11Attribute* attrDestroyable = new P11AttrDestroyable(osobject);
 
 	// Initialize the attributes
 	if
@@ -84,7 +85,8 @@ bool P11Object::init(OSObject *inobject)
 		!attrPrivate->init() ||
 		!attrModifiable->init() ||
 		!attrLabel->init() ||
-		!attrCopyable->init()
+		!attrCopyable->init() ||
+		!attrDestroyable->init()
 	)
 	{
 		ERROR_MSG("Could not initialize the attribute");
@@ -94,6 +96,7 @@ bool P11Object::init(OSObject *inobject)
 		delete attrModifiable;
 		delete attrLabel;
 		delete attrCopyable;
+		delete attrDestroyable;
 		return false;
 	}
 
@@ -104,6 +107,7 @@ bool P11Object::init(OSObject *inobject)
 	attributes[attrModifiable->getType()] = attrModifiable;
 	attributes[attrLabel->getType()] = attrLabel;
 	attributes[attrCopyable->getType()] = attrCopyable;
+	attributes[attrDestroyable->getType()] = attrDestroyable;
 
 	initialized = true;
 	return true;
@@ -113,28 +117,29 @@ CK_RV P11Object::loadTemplate(Token *token, CK_ATTRIBUTE_PTR pTemplate, CK_ULONG
 {
 	bool isPrivate = this->isPrivate();
 
-	// [PKCS#11 v2.3 pg.131]
-	// 1. If the specified attribute (i.e. the attribute specified by the
-	// type field) for the object cannot be revealed because the object
-	// is sensitive or unextractable, then the ulValueLen field in that
-	// tripple is modified to hold the value -1 (i.e., when it is cast
-	// to a CK_LONG, it holds -1).
+	// [PKCS#11 v2.40, C_GetAttributeValue]
+	// 1. If the specified attribute (i.e., the attribute specified by the
+	//    type field) for the object cannot be revealed because the object
+	//    is sensitive or unextractable, then the ulValueLen field in that
+	//    triple is modified to hold the value CK_UNAVAILABLE_INFORMATION.
 	//
-	// 2. Otherwise, if the specified attribute for the object is invalid
-	// (the object does not possess such and attribute), then the
-	// ulValueLen field in that triple is modified to hold the value -1.
+	// 2. Otherwise, if the specified value for the object is invalid (the
+	//    object does not possess such an attribute), then the ulValueLen
+	//    field in that triple is modified to hold the value
+	//    CK_UNAVAILABLE_INFORMATION.
 	//
 	// 3. Otherwise, if the pValue field has the value NULL_PTR, then the
-	// ulValueLen field is modified to hold the exact length of the
-	// specified attribute for the object.
+	//    ulValueLen field is modified to hold the exact length of the
+	//    specified attribute for the object.
 	//
 	// 4. Otherwise, if the length specified in ulValueLen is large enough
-	// to hold the value of the specified attribute for the object, then
-	// that attribute is copied into the buffer located at pValue, and
-	// the ulValueLen field is modified to hold the exact length of the
-	// attribute.
+	//    to hold the value of the specified attribute for the object,
+	//    then that attribute is copied into the buffer located at pValue,
+	//    and the ulValueLen field is modified to hold the exact length of
+	//    the attribute.
 	//
-	// 5. Otherwise, the ulValueLen field is modified to hold the value -1.
+	// 5. Otherwise, the ulValueLen field is modified to hold the value
+	//    CK_UNAVAILABLE_INFORMATION.
 
 	bool invalid = false, sensitive = false, buffer_too_small = false;
 
@@ -145,7 +150,7 @@ CK_RV P11Object::loadTemplate(Token *token, CK_ATTRIBUTE_PTR pTemplate, CK_ULONG
 
 		// case 2 of the attribute checks
 		if (attr == NULL) {
-			pTemplate[i].ulValueLen = (CK_ULONG)-1;
+			pTemplate[i].ulValueLen = CK_UNAVAILABLE_INFORMATION;
 			// If case 2 applies to any of the requested attributes, then the call should
 			// return the value CKR_ATTRIBUTE_TYPE_INVALID.
 			invalid = true;
@@ -189,21 +194,30 @@ CK_RV P11Object::saveTemplate(Token *token, bool isPrivate, CK_ATTRIBUTE_PTR pTe
 	if (osobject->startTransaction() == false)
 		return CKR_GENERAL_ERROR;
 
-	// [PKCS#11 v2.3 pg. 62] OBJECT_OP_COPY
-	//    If the CKA_COPYABLE attribute of the object to be copied is set to CK_FALSE, C_CopyObject
-	//    returns CKR_COPY_PROHIBITED.
+	if (op == OBJECT_OP_SET)
+	{
+		if (!isModifiable())
+		{
+			osobject->abortTransaction();
+			return CKR_ACTION_PROHIBITED;
+		}
+	}
+
+	// [PKCS#11 v2.40, 4.1.3 Copying objects] OBJECT_OP_COPY
+	//    If the CKA_COPYABLE attribute of the object to be copied is set
+	//    to CK_FALSE, C_CopyObject returns CKR_ACTION_PROHIBITED.
 	if (op == OBJECT_OP_COPY)
 	{
 		if (!isCopyable())
 		{
 			osobject->abortTransaction();
-			return CKR_COPY_PROHIBITED;
+			return CKR_ACTION_PROHIBITED;
 		}
 	}
 
 	for (CK_ULONG i = 0; i < ulAttributeCount; i++)
 	{
-		// [PKCS#11 v2.3 pg. 61] OBJECT_OP_CREATE | OBJECT_OP_SET | OBJECT_OP_COPY
+		// [PKCS#11 v2.40, 4.1.1 Creating objects] OBJECT_OP_CREATE | OBJECT_OP_SET | OBJECT_OP_COPY
 		//    1. If the supplied template specifies a value for an invalid attribute, then the attempt
 		//    should fail with the error code CKR_ATTRIBUTE_TYPE_INVALID. An attribute
 		//    is valid if it is either one of the attributes described in the Cryptoki specification or an
@@ -225,7 +239,7 @@ CK_RV P11Object::saveTemplate(Token *token, bool isPrivate, CK_ATTRIBUTE_PTR pTe
 		}
 	}
 
-	// [PKCS#11 v2.3 pg. 60]
+	// [PKCS#11 v2.40, 4.1.1 Creating objects]
 	//    4. If the attribute values in the supplied template, together with any default attribute
 	//    values and any attribute values contributed to the object by the object-creation
 	//    function itself, are insufficient to fully specify the object to create, then the attempt
@@ -237,9 +251,9 @@ CK_RV P11Object::saveTemplate(Token *token, bool isPrivate, CK_ATTRIBUTE_PTR pTe
 	{
 		CK_ULONG checks = i->second->getChecks();
 
-		//  ck1  Must be specified when object is created with C_CreateObject.
-		//  ck3  Must be specified when object is generated with C_GenerateKey or C_GenerateKeyPair.
-		//  ck5  Must be specified when object is unwrapped with C_UnwrapKey.
+		//  ck1  MUST be specified when object is created with C_CreateObject.
+		//  ck3  MUST be specified when object is generated with C_GenerateKey or C_GenerateKeyPair.
+		//  ck5  MUST be specified when object is unwrapped with C_UnwrapKey.
 		if (((checks & P11Attribute::ck1) == P11Attribute::ck1 && op == OBJECT_OP_CREATE) ||
 		    ((checks & P11Attribute::ck3) == P11Attribute::ck3 && op == OBJECT_OP_GENERATE) ||
 		    ((checks & P11Attribute::ck5) == P11Attribute::ck5 && op == OBJECT_OP_UNWRAP))
@@ -264,7 +278,7 @@ CK_RV P11Object::saveTemplate(Token *token, bool isPrivate, CK_ATTRIBUTE_PTR pTe
 		}
 	}
 
-	// [PKCS#11 v2.3 pg. 60]
+	// [PKCS#11 v2.40, 4.1.1 Creating objects]
 	//    5. If the attribute values in the supplied template, together with any default attribute
 	//    values and any attribute values contributed to the object by the object-creation
 	//    function itself, are inconsistent, then the attempt should fail with the error code
@@ -338,8 +352,8 @@ bool P11DataObj::init(OSObject *inobject)
 	// Create attributes
 	P11Attribute* attrApplication = new P11AttrApplication(osobject);
 	P11Attribute* attrObjectID = new P11AttrObjectID(osobject);
-	// NOTE: There is no mention in the PKCS#11 v2.3 spec that for a Data
-	//  Object the CKA_VALUE attribute may be modified after creation !
+	// NOTE: There is no mention in the PKCS#11 v2.40 spec that for a Data
+	//  Object the CKA_VALUE attribute may be modified after creation!
 	//  Therefore we assume it is not allowed to change the CKA_VALUE
 	//  attribute of a Data Object.
 	P11Attribute* attrValue = new P11AttrValue(osobject,0);
@@ -385,6 +399,11 @@ bool P11CertificateObj::init(OSObject *inobject)
 		OSAttribute setClass((unsigned long)CKO_CERTIFICATE);
 		inobject->setAttribute(CKA_CLASS, setClass);
 	}
+	// Make certificates public
+	if (!inobject->attributeExists(CKA_PRIVATE)) {
+		OSAttribute setPrivate(false);
+		inobject->setAttribute(CKA_PRIVATE, setPrivate);
+	}
 
 	// Create parent
 	if (!P11Object::init(inobject)) return false;
@@ -400,6 +419,8 @@ bool P11CertificateObj::init(OSObject *inobject)
 	P11Attribute* attrCheckValue = new P11AttrCheckValue(osobject, 0);
 	P11Attribute* attrStartDate = new P11AttrStartDate(osobject,0);
 	P11Attribute* attrEndDate = new P11AttrEndDate(osobject,0);
+	// TODO: CKA_PUBLIC_KEY_INFO is accepted, but we do not calculate it.
+	P11Attribute* attrPublicKeyInfo = new P11AttrPublicKeyInfo(osobject,0);
 
 	// Initialize the attributes
 	if
@@ -409,7 +430,8 @@ bool P11CertificateObj::init(OSObject *inobject)
 		!attrCertificateCategory->init() ||
 		!attrCheckValue->init() ||
 		!attrStartDate->init() ||
-		!attrEndDate->init()
+		!attrEndDate->init() ||
+		!attrPublicKeyInfo->init()
 	)
 	{
 		ERROR_MSG("Could not initialize the attribute");
@@ -419,6 +441,7 @@ bool P11CertificateObj::init(OSObject *inobject)
 		delete attrCheckValue;
 		delete attrStartDate;
 		delete attrEndDate;
+		delete attrPublicKeyInfo;
 		return false;
 	}
 
@@ -429,6 +452,7 @@ bool P11CertificateObj::init(OSObject *inobject)
 	attributes[attrCheckValue->getType()] = attrCheckValue;
 	attributes[attrStartDate->getType()] = attrStartDate;
 	attributes[attrEndDate->getType()] = attrEndDate;
+	attributes[attrPublicKeyInfo->getType()] = attrPublicKeyInfo;
 
 	initialized = true;
 	return true;
@@ -595,7 +619,7 @@ bool P11KeyObj::init(OSObject *inobject)
 	P11Attribute* attrDerive = new P11AttrDerive(osobject);
 	P11Attribute* attrLocal = new P11AttrLocal(osobject,P11Attribute::ck6);
 	P11Attribute* attrKeyGenMechanism = new P11AttrKeyGenMechanism(osobject);
-	// TODO: CKA_ALLOWED_MECHANISMS is not supported
+	P11Attribute* attrAllowedMechanisms = new P11AttrAllowedMechanisms(osobject);
 
 	// Initialize the attributes
 	if
@@ -606,7 +630,8 @@ bool P11KeyObj::init(OSObject *inobject)
 		!attrEndDate->init() ||
 		!attrDerive->init() ||
 		!attrLocal->init() ||
-		!attrKeyGenMechanism->init()
+		!attrKeyGenMechanism->init() ||
+		!attrAllowedMechanisms->init()
 	)
 	{
 		ERROR_MSG("Could not initialize the attribute");
@@ -617,6 +642,7 @@ bool P11KeyObj::init(OSObject *inobject)
 		delete attrDerive;
 		delete attrLocal;
 		delete attrKeyGenMechanism;
+		delete attrAllowedMechanisms;
 		return false;
 	}
 
@@ -628,6 +654,7 @@ bool P11KeyObj::init(OSObject *inobject)
 	attributes[attrDerive->getType()] = attrDerive;
 	attributes[attrLocal->getType()] = attrLocal;
 	attributes[attrKeyGenMechanism->getType()] = attrKeyGenMechanism;
+	attributes[attrAllowedMechanisms->getType()] = attrAllowedMechanisms;
 
 	initialized = true;
 	return true;
@@ -645,9 +672,15 @@ bool P11PublicKeyObj::init(OSObject *inobject)
 	if (initialized) return true;
 	if (inobject == NULL) return false;
 
+	// Set default values for attributes that will be introduced in the parent
 	if (!inobject->attributeExists(CKA_CLASS) || inobject->getUnsignedLongValue(CKA_CLASS, CKO_VENDOR_DEFINED) != CKO_PUBLIC_KEY) {
 		OSAttribute setClass((unsigned long)CKO_PUBLIC_KEY);
 		inobject->setAttribute(CKA_CLASS, setClass);
+	}
+	// Make public keys public
+	if (!inobject->attributeExists(CKA_PRIVATE)) {
+		OSAttribute setPrivate(false);
+		inobject->setAttribute(CKA_PRIVATE, setPrivate);
 	}
 
 	// Create parent
@@ -663,6 +696,8 @@ bool P11PublicKeyObj::init(OSObject *inobject)
 	P11Attribute* attrWrap = new P11AttrWrap(osobject);
 	P11Attribute* attrTrusted = new P11AttrTrusted(osobject);
 	P11Attribute* attrWrapTemplate = new P11AttrWrapTemplate(osobject);
+	// TODO: CKA_PUBLIC_KEY_INFO is accepted, but we do not calculate it
+	P11Attribute* attrPublicKeyInfo = new P11AttrPublicKeyInfo(osobject,0);
 
 	// Initialize the attributes
 	if
@@ -673,7 +708,8 @@ bool P11PublicKeyObj::init(OSObject *inobject)
 		!attrVerifyRecover->init() ||
 		!attrWrap->init() ||
 		!attrTrusted->init() ||
-		!attrWrapTemplate->init()
+		!attrWrapTemplate->init() ||
+		!attrPublicKeyInfo->init()
 	)
 	{
 		ERROR_MSG("Could not initialize the attribute");
@@ -684,6 +720,7 @@ bool P11PublicKeyObj::init(OSObject *inobject)
 		delete attrWrap;
 		delete attrTrusted;
 		delete attrWrapTemplate;
+		delete attrPublicKeyInfo;
 		return false;
 	}
 
@@ -695,6 +732,7 @@ bool P11PublicKeyObj::init(OSObject *inobject)
 	attributes[attrWrap->getType()] = attrWrap;
 	attributes[attrTrusted->getType()] = attrTrusted;
 	attributes[attrWrapTemplate->getType()] = attrWrapTemplate;
+	attributes[attrPublicKeyInfo->getType()] = attrPublicKeyInfo;
 
 	initialized = true;
 	return true;
@@ -816,6 +854,51 @@ bool P11ECPublicKeyObj::init(OSObject *inobject)
 
 	if (!inobject->attributeExists(CKA_KEY_TYPE) || inobject->getUnsignedLongValue(CKA_KEY_TYPE, CKK_VENDOR_DEFINED) != CKK_EC) {
 		OSAttribute setKeyType((unsigned long)CKK_EC);
+		inobject->setAttribute(CKA_KEY_TYPE, setKeyType);
+	}
+
+	// Create parent
+	if (!P11PublicKeyObj::init(inobject)) return false;
+
+	// Create attributes
+	P11Attribute* attrEcParams = new P11AttrEcParams(osobject,P11Attribute::ck3);
+	P11Attribute* attrEcPoint = new P11AttrEcPoint(osobject);
+
+	// Initialize the attributes
+	if
+	(
+		!attrEcParams->init() ||
+		!attrEcPoint->init()
+	)
+	{
+		ERROR_MSG("Could not initialize the attribute");
+		delete attrEcParams;
+		delete attrEcPoint;
+		return false;
+	}
+
+	// Add them to the map
+	attributes[attrEcParams->getType()] = attrEcParams;
+	attributes[attrEcPoint->getType()] = attrEcPoint;
+
+	initialized = true;
+	return true;
+}
+
+// Constructor
+P11EDPublicKeyObj::P11EDPublicKeyObj()
+{
+	initialized = false;
+}
+
+// Add attributes
+bool P11EDPublicKeyObj::init(OSObject *inobject)
+{
+	if (initialized) return true;
+	if (inobject == NULL) return false;
+
+	if (!inobject->attributeExists(CKA_KEY_TYPE) || inobject->getUnsignedLongValue(CKA_KEY_TYPE, CKK_VENDOR_DEFINED) != CKK_EC_EDWARDS) {
+		OSAttribute setKeyType((unsigned long)CKK_EC_EDWARDS);
 		inobject->setAttribute(CKA_KEY_TYPE, setKeyType);
 	}
 
@@ -983,6 +1066,8 @@ bool P11PrivateKeyObj::init(OSObject *inobject)
 	P11Attribute* attrUnwrapTemplate = new P11AttrUnwrapTemplate(osobject);
 	// TODO: CKA_ALWAYS_AUTHENTICATE is accepted, but we do not use it
 	P11Attribute* attrAlwaysAuthenticate = new P11AttrAlwaysAuthenticate(osobject);
+	// TODO: CKA_PUBLIC_KEY_INFO is accepted, but we do not calculate it
+	P11Attribute* attrPublicKeyInfo = new P11AttrPublicKeyInfo(osobject,P11Attribute::ck8);
 
 	// Initialize the attributes
 	if
@@ -998,7 +1083,8 @@ bool P11PrivateKeyObj::init(OSObject *inobject)
 		!attrNeverExtractable->init() ||
 		!attrWrapWithTrusted->init() ||
 		!attrUnwrapTemplate->init() ||
-		!attrAlwaysAuthenticate->init()
+		!attrAlwaysAuthenticate->init() ||
+		!attrPublicKeyInfo->init()
 	)
 	{
 		ERROR_MSG("Could not initialize the attribute");
@@ -1014,6 +1100,7 @@ bool P11PrivateKeyObj::init(OSObject *inobject)
 		delete attrWrapWithTrusted;
 		delete attrUnwrapTemplate;
 		delete attrAlwaysAuthenticate;
+		delete attrPublicKeyInfo;
 		return false;
 	}
 
@@ -1030,6 +1117,7 @@ bool P11PrivateKeyObj::init(OSObject *inobject)
 	attributes[attrWrapWithTrusted->getType()] = attrWrapWithTrusted;
 	attributes[attrUnwrapTemplate->getType()] = attrUnwrapTemplate;
 	attributes[attrAlwaysAuthenticate->getType()] = attrAlwaysAuthenticate;
+	attributes[attrPublicKeyInfo->getType()] = attrPublicKeyInfo;
 
 	initialized = true;
 	return true;
@@ -1171,6 +1259,51 @@ bool P11ECPrivateKeyObj::init(OSObject *inobject)
 
 	if (!inobject->attributeExists(CKA_KEY_TYPE) || inobject->getUnsignedLongValue(CKA_KEY_TYPE, CKK_VENDOR_DEFINED) != CKK_EC) {
 		OSAttribute setKeyType((unsigned long)CKK_EC);
+		inobject->setAttribute(CKA_KEY_TYPE, setKeyType);
+	}
+
+	// Create parent
+	if (!P11PrivateKeyObj::init(inobject)) return false;
+
+	// Create attributes
+	P11Attribute* attrEcParams = new P11AttrEcParams(osobject,P11Attribute::ck4|P11Attribute::ck6);
+	P11Attribute* attrValue = new P11AttrValue(osobject,P11Attribute::ck1|P11Attribute::ck4|P11Attribute::ck6|P11Attribute::ck7);
+
+	// Initialize the attributes
+	if
+	(
+		!attrEcParams->init() ||
+		!attrValue->init()
+	)
+	{
+		ERROR_MSG("Could not initialize the attribute");
+		delete attrEcParams;
+		delete attrValue;
+		return false;
+	}
+
+	// Add them to the map
+	attributes[attrEcParams->getType()] = attrEcParams;
+	attributes[attrValue->getType()] = attrValue;
+
+	initialized = true;
+	return true;
+}
+
+// Constructor
+P11EDPrivateKeyObj::P11EDPrivateKeyObj()
+{
+	initialized = false;
+}
+
+// Add attributes
+bool P11EDPrivateKeyObj::init(OSObject *inobject)
+{
+	if (initialized) return true;
+	if (inobject == NULL) return false;
+
+	if (!inobject->attributeExists(CKA_KEY_TYPE) || inobject->getUnsignedLongValue(CKA_KEY_TYPE, CKK_VENDOR_DEFINED) != CKK_EC_EDWARDS) {
+		OSAttribute setKeyType((unsigned long)CKK_EC_EDWARDS);
 		inobject->setAttribute(CKA_KEY_TYPE, setKeyType);
 	}
 

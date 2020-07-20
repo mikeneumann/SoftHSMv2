@@ -41,10 +41,8 @@
 #include "MacAlgorithm.h"
 #include "RNG.h"
 #include <memory>
-#ifdef WITH_GOST
 #include <openssl/conf.h>
 #include <openssl/engine.h>
-#endif
 
 class OSSLCryptoFactory : public CryptoFactory
 {
@@ -94,6 +92,10 @@ private:
 	static std::auto_ptr<OSSLCryptoFactory> instance;
 #endif
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+	bool setLockingCallback;
+#endif
+
 #ifdef WITH_FIPS
 	// The FIPS 140-2 selftest status
 	static bool FipsSelfTestStatus;
@@ -101,6 +103,8 @@ private:
 
 	// The one-and-only RNG instance
 	RNG* rng;
+	// And RDRAND engine to use with it
+	ENGINE *rdrand_engine;
 
 #ifdef WITH_GOST
 	// The GOST engine

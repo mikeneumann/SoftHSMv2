@@ -45,10 +45,12 @@ Session::Session(Slot* inSlot, bool inIsReadWrite, CK_VOID_PTR inPApplication, C
 	operation = SESSION_OP_NONE;
 	findOp = NULL;
 	digestOp = NULL;
+	hashAlgo = HashAlgo::Unknown;
 	macOp = NULL;
 	asymmetricCryptoOp = NULL;
 	symmetricCryptoOp = NULL;
 	mechanism = AsymMech::Unknown;
+	reAuthentication = false;
 	allowSinglePartOp = false;
 	allowMultiPartOp = false;
 	publicKey = NULL;
@@ -70,10 +72,12 @@ Session::Session()
 	operation = SESSION_OP_NONE;
 	findOp = NULL;
 	digestOp = NULL;
+	hashAlgo = HashAlgo::Unknown;
 	macOp = NULL;
 	asymmetricCryptoOp = NULL;
 	symmetricCryptoOp = NULL;
 	mechanism = AsymMech::Unknown;
+	reAuthentication = false;
 	allowSinglePartOp = false;
 	allowMultiPartOp = false;
 	publicKey = NULL;
@@ -234,6 +238,7 @@ void Session::resetOp()
 	}
 
 	operation = SESSION_OP_NONE;
+	reAuthentication = false;
 }
 
 void Session::setFindOp(FindOperation *inFindOp)
@@ -264,6 +269,16 @@ void Session::setDigestOp(HashAlgorithm* inDigestOp)
 HashAlgorithm* Session::getDigestOp()
 {
 	return digestOp;
+}
+
+void Session::setHashAlgo(HashAlgo::Type inHashAlgo)
+{
+	hashAlgo = inHashAlgo;
+}
+
+HashAlgo::Type Session::getHashAlgo()
+{
+	return hashAlgo;
 }
 
 // Set the MACing operator
@@ -349,6 +364,16 @@ void* Session::getParameters(size_t& inParamLen)
 {
 	inParamLen = paramLen;
 	return param;
+}
+
+void Session::setReAuthentication(bool inReAuthentication)
+{
+	reAuthentication = inReAuthentication;
+}
+
+bool Session::getReAuthentication()
+{
+	return reAuthentication;
 }
 
 void Session::setAllowMultiPartOp(bool inAllowMultiPartOp)

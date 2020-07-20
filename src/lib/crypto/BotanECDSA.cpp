@@ -43,6 +43,7 @@
 #include <algorithm>
 #include <botan/ec_group.h>
 #include <botan/ecdsa.h>
+#include <botan/version.h>
 #include <iostream>
 
 // Constructor
@@ -96,8 +97,8 @@ bool BotanECDSA::sign(PrivateKey* privateKey, const ByteString& dataToSign,
 
 	try
 	{
-		signer = new Botan::PK_Signer(*botanKey, emsa);
-		// Should we add DISABLE_FAULT_PROTECTION? Makes this operation faster.
+		BotanRNG* rng = (BotanRNG*)BotanCryptoFactory::i()->getRNG();
+		signer = new Botan::PK_Signer(*botanKey, *rng->getRNG(), emsa);
 	}
 	catch (...)
 	{
@@ -107,11 +108,7 @@ bool BotanECDSA::sign(PrivateKey* privateKey, const ByteString& dataToSign,
 	}
 
 	// Perform the signature operation
-#if BOTAN_VERSION_MINOR == 11
-	std::vector<Botan::byte> signResult;
-#else
-	Botan::SecureVector<Botan::byte> signResult;
-#endif
+	std::vector<uint8_t> signResult;
 	try
 	{
 		BotanRNG* rng = (BotanRNG*)BotanCryptoFactory::i()->getRNG();
@@ -129,11 +126,7 @@ bool BotanECDSA::sign(PrivateKey* privateKey, const ByteString& dataToSign,
 
 	// Return the result
 	signature.resize(signResult.size());
-#if BOTAN_VERSION_MINOR == 11
 	memcpy(&signature[0], signResult.data(), signResult.size());
-#else
-	memcpy(&signature[0], signResult.begin(), signResult.size());
-#endif
 
 	delete signer;
 	signer = NULL;

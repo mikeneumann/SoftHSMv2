@@ -1,9 +1,9 @@
 MAINTAINERCLEANFILES = 		$(srcdir)/Makefile.in
 
-AM_CPPFLAGS =                   -I$(srcdir)/../cryptoki_compat \
+AM_CPPFLAGS =			-I$(srcdir)/.. \
 				-I$(srcdir)/../crypto \
 				-I$(srcdir)/../data_mgr \
-				-I$(srcdir)/..
+				-I$(srcdir)/../pkcs11
 
 noinst_LTLIBRARIES =		libsofthsm_common.la
 libsofthsm_common_la_SOURCES =	Configuration.cpp \
@@ -15,7 +15,8 @@ libsofthsm_common_la_SOURCES =	Configuration.cpp \
 
 man_MANS =			softhsm2.conf.5
 
-EXTRA_DIST =			$(srcdir)/*.h \
+EXTRA_DIST =			$(srcdir)/CMakeLists.txt \
+				$(srcdir)/*.h \
 				$(srcdir)/softhsm2.conf.5.in
 
 install-data-hook:

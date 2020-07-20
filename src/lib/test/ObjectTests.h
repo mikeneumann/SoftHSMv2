@@ -57,7 +57,9 @@ class ObjectTests : public TestsBase
 	CPPUNIT_TEST(testAlwaysNeverAttribute);
 	CPPUNIT_TEST(testSensitiveAttributes);
 	CPPUNIT_TEST(testGetInvalidAttribute);
-	CPPUNIT_TEST(testArrayAttribute);
+	CPPUNIT_TEST(testAllowedMechanisms);
+	CPPUNIT_TEST(testReAuthentication);
+	CPPUNIT_TEST(testTemplateAttribute);
 	CPPUNIT_TEST(testCreateSecretKey);
 	CPPUNIT_TEST_SUITE_END();
 
@@ -78,7 +80,9 @@ public:
 	void testAlwaysNeverAttribute();
 	void testSensitiveAttributes();
 	void testGetInvalidAttribute();
-	void testArrayAttribute();
+	void testReAuthentication();
+	void testAllowedMechanisms();
+	void testTemplateAttribute();
 	void testCreateSecretKey();
 
 protected:
@@ -92,7 +96,8 @@ protected:
 		CK_BBOOL bPrivate,
 		CK_BBOOL bModifiable,
 		CK_UTF8CHAR_PTR pLabel, CK_ULONG ulLabelLen,
-		CK_BBOOL bCopyable
+		CK_BBOOL bCopyable,
+		CK_BBOOL bDestroyable
 	);
 	void checkDataObjectAttributes
 	(	CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
@@ -177,6 +182,7 @@ protected:
 	);
 
 	CK_RV createDataObjectMinimal(CK_SESSION_HANDLE hSession, CK_BBOOL bToken, CK_BBOOL bPrivate, CK_OBJECT_HANDLE &hObject);
+	CK_RV createDataObjectMCD(CK_SESSION_HANDLE hSession, CK_BBOOL bToken, CK_BBOOL bPrivate, CK_BBOOL bModifiable, CK_BBOOL bCopyable, CK_BBOOL bDestroyable, CK_OBJECT_HANDLE &hObject);
 	CK_RV createDataObjectNormal(CK_SESSION_HANDLE hSession, CK_BBOOL bToken, CK_BBOOL bPrivate, CK_OBJECT_HANDLE &hObject);
 
 	CK_RV createCertificateObjectIncomplete(CK_SESSION_HANDLE hSession, CK_BBOOL bToken, CK_BBOOL bPrivate, CK_OBJECT_HANDLE &hObject);

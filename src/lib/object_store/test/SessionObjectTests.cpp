@@ -52,7 +52,7 @@ void SessionObjectTests::tearDown()
 
 void SessionObjectTests::testBoolAttr()
 {
-    SessionObject testObject(NULL, 1, 1);
+	SessionObject testObject(NULL, 1, 1);
 
 	CPPUNIT_ASSERT(testObject.isValid());
 
@@ -106,7 +106,7 @@ void SessionObjectTests::testBoolAttr()
 
 void SessionObjectTests::testULongAttr()
 {
-    SessionObject testObject(NULL, 1, 1);
+	SessionObject testObject(NULL, 1, 1);
 
 	CPPUNIT_ASSERT(testObject.isValid());
 
@@ -125,7 +125,7 @@ void SessionObjectTests::testULongAttr()
 	CPPUNIT_ASSERT(testObject.setAttribute(CKA_MODULUS_BITS, attr1));
 	CPPUNIT_ASSERT(testObject.setAttribute(CKA_PRIME_BITS, attr2));
 	CPPUNIT_ASSERT(testObject.setAttribute(CKA_AUTH_PIN_FLAGS, attr3));
-	CPPUNIT_ASSERT(testObject.setAttribute(CKA_SUBPRIME_BITS, attr4));
+	CPPUNIT_ASSERT(testObject.setAttribute(CKA_SUB_PRIME_BITS, attr4));
 	CPPUNIT_ASSERT(testObject.setAttribute(CKA_KEY_TYPE, attr5));
 
 	CPPUNIT_ASSERT(testObject.isValid());
@@ -133,20 +133,20 @@ void SessionObjectTests::testULongAttr()
 	CPPUNIT_ASSERT(testObject.attributeExists(CKA_MODULUS_BITS));
 	CPPUNIT_ASSERT(testObject.attributeExists(CKA_PRIME_BITS));
 	CPPUNIT_ASSERT(testObject.attributeExists(CKA_AUTH_PIN_FLAGS));
-	CPPUNIT_ASSERT(testObject.attributeExists(CKA_SUBPRIME_BITS));
+	CPPUNIT_ASSERT(testObject.attributeExists(CKA_SUB_PRIME_BITS));
 	CPPUNIT_ASSERT(testObject.attributeExists(CKA_KEY_TYPE));
 	CPPUNIT_ASSERT(!testObject.attributeExists(CKA_ID));
 
 	CPPUNIT_ASSERT(testObject.getAttribute(CKA_MODULUS_BITS).isUnsignedLongAttribute());
 	CPPUNIT_ASSERT(testObject.getAttribute(CKA_PRIME_BITS).isUnsignedLongAttribute());
 	CPPUNIT_ASSERT(testObject.getAttribute(CKA_AUTH_PIN_FLAGS).isUnsignedLongAttribute());
-	CPPUNIT_ASSERT(testObject.getAttribute(CKA_SUBPRIME_BITS).isUnsignedLongAttribute());
+	CPPUNIT_ASSERT(testObject.getAttribute(CKA_SUB_PRIME_BITS).isUnsignedLongAttribute());
 	CPPUNIT_ASSERT(testObject.getAttribute(CKA_KEY_TYPE).isUnsignedLongAttribute());
 
 	CPPUNIT_ASSERT(testObject.getAttribute(CKA_MODULUS_BITS).getUnsignedLongValue() == 0x12345678);
 	CPPUNIT_ASSERT(testObject.getAttribute(CKA_PRIME_BITS).getUnsignedLongValue() == 0x87654321);
 	CPPUNIT_ASSERT(testObject.getAttribute(CKA_AUTH_PIN_FLAGS).getUnsignedLongValue() == 0x01010101);
-	CPPUNIT_ASSERT(testObject.getAttribute(CKA_SUBPRIME_BITS).getUnsignedLongValue() == 0x10101010);
+	CPPUNIT_ASSERT(testObject.getAttribute(CKA_SUB_PRIME_BITS).getUnsignedLongValue() == 0x10101010);
 	CPPUNIT_ASSERT(testObject.getAttribute(CKA_KEY_TYPE).getUnsignedLongValue() == 0xABCDEF);
 
 	unsigned long value6 = 0x90909090;
@@ -166,7 +166,7 @@ void SessionObjectTests::testByteStrAttr()
 	ByteString value4 = "98A7E5D798A7E5D798A7E5D798A7E5D798A7E5D798A7E5D7";
 	ByteString value5 = "ABCDABCDABCDABCDABCDABCDABCDABCD";
 
-    SessionObject testObject(NULL, 1, 1);
+	SessionObject testObject(NULL, 1, 1);
 
 	CPPUNIT_ASSERT(testObject.isValid());
 
@@ -211,7 +211,35 @@ void SessionObjectTests::testByteStrAttr()
 	CPPUNIT_ASSERT(testObject.getByteStringValue(CKA_ISSUER) == value6);
 }
 
-void SessionObjectTests::testArrayAttr()
+void SessionObjectTests::testMechTypeSetAttr()
+{
+	SessionObject testObject(NULL, 1, 1);
+
+	CPPUNIT_ASSERT(testObject.isValid());
+
+	std::set<CK_MECHANISM_TYPE> set;
+	set.insert(CKM_SHA256);
+	set.insert(CKM_SHA512);
+
+	OSAttribute attr(set);
+
+	CPPUNIT_ASSERT(testObject.setAttribute(CKA_ALLOWED_MECHANISMS, attr));
+	CPPUNIT_ASSERT(testObject.isValid());
+
+	CPPUNIT_ASSERT(testObject.attributeExists(CKA_ALLOWED_MECHANISMS));
+
+	CPPUNIT_ASSERT(testObject.getAttribute(CKA_ALLOWED_MECHANISMS).isMechanismTypeSetAttribute());
+
+	std::set<CK_MECHANISM_TYPE> retrieved =
+			testObject.getAttribute(CKA_ALLOWED_MECHANISMS).getMechanismTypeSetValue();
+
+	CPPUNIT_ASSERT(retrieved.size() == 2);
+	CPPUNIT_ASSERT(retrieved.find(CKM_SHA256) != retrieved.end());
+	CPPUNIT_ASSERT(retrieved.find(CKM_SHA384) == retrieved.end());
+	CPPUNIT_ASSERT(retrieved.find(CKM_SHA512) != retrieved.end());
+}
+
+void SessionObjectTests::testAttrMapAttr()
 {
 	SessionObject testObject(NULL, 1, 1);
 
@@ -238,9 +266,10 @@ void SessionObjectTests::testArrayAttr()
 	CPPUNIT_ASSERT(testObject.attributeExists(CKA_WRAP_TEMPLATE));
 	CPPUNIT_ASSERT(!testObject.attributeExists(CKA_UNWRAP_TEMPLATE));
 
-	CPPUNIT_ASSERT(testObject.getAttribute(CKA_WRAP_TEMPLATE).isArrayAttribute());
+	CPPUNIT_ASSERT(testObject.getAttribute(CKA_WRAP_TEMPLATE).isAttributeMapAttribute());
 
-	std::map<CK_ATTRIBUTE_TYPE,OSAttribute> mattrb = testObject.getAttribute(CKA_WRAP_TEMPLATE).getArrayValue();
+	std::map<CK_ATTRIBUTE_TYPE,OSAttribute> mattrb =
+			testObject.getAttribute(CKA_WRAP_TEMPLATE).getAttributeMapValue();
 	CPPUNIT_ASSERT(mattrb.size() == 3);
 	CPPUNIT_ASSERT(mattrb.find(CKA_TOKEN) != mattrb.end());
 	CPPUNIT_ASSERT(mattrb.at(CKA_TOKEN).isBooleanAttribute());
@@ -258,7 +287,7 @@ void SessionObjectTests::testMixedAttr()
 {
 	ByteString value3 = "BDEBDBEDBBDBEBDEBE792759537328";
 
-    SessionObject testObject(NULL, 1, 1);
+	SessionObject testObject(NULL, 1, 1);
 
 	CPPUNIT_ASSERT(testObject.isValid());
 
@@ -294,7 +323,7 @@ void SessionObjectTests::testDoubleAttr()
 	ByteString value3 = "BDEBDBEDBBDBEBDEBE792759537328";
 	ByteString value3a = "466487346943785684957634";
 
-    SessionObject testObject(NULL, 1, 1);
+	SessionObject testObject(NULL, 1, 1);
 
 	CPPUNIT_ASSERT(testObject.isValid());
 
@@ -354,7 +383,7 @@ void SessionObjectTests::testCloseSession()
 {
 	ByteString value3 = "BDEBDBEDBBDBEBDEBE792759537328";
 
-    SessionObject testObject(NULL, 1, 1);
+	SessionObject testObject(NULL, 1, 1);
 
 	CPPUNIT_ASSERT(testObject.isValid());
 
@@ -385,7 +414,7 @@ void SessionObjectTests::testCloseSession()
 	CPPUNIT_ASSERT(testObject.getAttribute(CKA_VALUE_BITS).getByteStringValue() == value3);
 
 	// Now close the session
-    testObject.removeOnSessionClose(1);
+	testObject.removeOnSessionClose(1);
 
 	CPPUNIT_ASSERT(!testObject.isValid());
 	CPPUNIT_ASSERT(!testObject.attributeExists(CKA_TOKEN));
@@ -396,7 +425,7 @@ void SessionObjectTests::testCloseSession()
 void SessionObjectTests::testDestroyObjectFails()
 {
 	// Create test object instance
-    SessionObject testObject(NULL, 1, 1);
+	SessionObject testObject(NULL, 1, 1);
 
 	CPPUNIT_ASSERT(testObject.isValid());
 

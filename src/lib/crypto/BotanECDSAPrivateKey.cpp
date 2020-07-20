@@ -43,6 +43,7 @@
 #include <botan/der_enc.h>
 #include <botan/asn1_oid.h>
 #include <botan/oids.h>
+#include <botan/version.h>
 
 // Constructors
 BotanECDSAPrivateKey::BotanECDSAPrivateKey()
@@ -129,29 +130,16 @@ ByteString BotanECDSAPrivateKey::PKCS8Encode()
 	if (eckey == NULL) return der;
 	// Force EC_DOMPAR_ENC_OID
 	const size_t PKCS8_VERSION = 0;
-#if BOTAN_VERSION_MINOR == 11
-	const std::vector<Botan::byte> parameters = eckey->domain().DER_encode(Botan::EC_DOMPAR_ENC_OID);
+	const std::vector<uint8_t> parameters = eckey->domain().DER_encode(Botan::EC_DOMPAR_ENC_OID);
 	const Botan::AlgorithmIdentifier alg_id(eckey->get_oid(), parameters);
-	const Botan::secure_vector<Botan::byte> ber =
+	const Botan::secure_vector<uint8_t> ber =
 		Botan::DER_Encoder()
 		.start_cons(Botan::SEQUENCE)
 		    .encode(PKCS8_VERSION)
 		    .encode(alg_id)
-		    .encode(eckey->pkcs8_private_key(), Botan::OCTET_STRING)
+		    .encode(eckey->private_key_bits(), Botan::OCTET_STRING)
 		.end_cons()
 	    .get_contents();
-#else
-	const Botan::MemoryVector<Botan::byte> parameters = eckey->domain().DER_encode(Botan::EC_DOMPAR_ENC_OID);
-	const Botan::AlgorithmIdentifier alg_id(eckey->get_oid(), parameters);
-	const Botan::SecureVector<Botan::byte> ber =
-		Botan::DER_Encoder()
-		.start_cons(Botan::SEQUENCE)
-		    .encode(PKCS8_VERSION)
-		    .encode(alg_id)
-		    .encode(eckey->pkcs8_private_key(), Botan::OCTET_STRING)
-		.end_cons()
-	    .get_contents();
-#endif
 	der.resize(ber.size());
 	memcpy(&der[0], &ber[0], ber.size());
 	return der;
@@ -162,11 +150,7 @@ bool BotanECDSAPrivateKey::PKCS8Decode(const ByteString& ber)
 {
 	Botan::DataSource_Memory source(ber.const_byte_str(), ber.size());
 	if (source.end_of_data()) return false;
-#if BOTAN_VERSION_MINOR == 11
-	Botan::secure_vector<Botan::byte> keydata;
-#else
-	Botan::SecureVector<Botan::byte> keydata;
-#endif
+	Botan::secure_vector<uint8_t> keydata;
 	Botan::AlgorithmIdentifier alg_id;
 	Botan::ECDSA_PrivateKey* key = NULL;
 	try

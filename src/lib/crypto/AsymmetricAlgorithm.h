@@ -52,7 +52,8 @@ struct AsymAlgo
 		DH,
 		ECDH,
 		ECDSA,
-		GOST
+		GOST,
+		EDDSA
         };
 };
 
@@ -70,6 +71,7 @@ struct AsymMech
 		RSA_SHA256_PKCS,
 		RSA_SHA384_PKCS,
 		RSA_SHA512_PKCS,
+		RSA_PKCS_PSS,
 		RSA_SHA1_PKCS_PSS,
 		RSA_SHA224_PKCS_PSS,
 		RSA_SHA256_PKCS_PSS,
@@ -84,7 +86,8 @@ struct AsymMech
 		DSA_SHA512,
 		ECDSA,
 		GOST,
-		GOST_GOST
+		GOST_GOST,
+		EDDSA
 	};
 };
 

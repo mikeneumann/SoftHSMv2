@@ -37,19 +37,20 @@
 #include "salloc.h"
 
 #include <botan/symkey.h>
-#include <botan/botan.h>
+#include <botan/mac.h>
+#include <botan/version.h>
 
 // Constructor
 BotanMacAlgorithm::BotanMacAlgorithm()
 {
-	hmac = NULL;
+	mac = NULL;
 }
 
 // Destructor
 BotanMacAlgorithm::~BotanMacAlgorithm()
 {
-	delete hmac;
-	hmac = NULL;
+	delete mac;
+	mac = NULL;
 }
 
 // Signing functions
@@ -62,11 +63,11 @@ bool BotanMacAlgorithm::signInit(const SymmetricKey* key)
 	}
 
 	// Determine the hash name
-	std::string hashName = getHash();
+	std::string macName = getAlgorithm();
 
-	if (hashName == "")
+	if (macName == "")
 	{
-		ERROR_MSG("Invalid sign hmac hash");
+		ERROR_MSG("Invalid sign mac algorithm");
 
 		ByteString dummy;
 		MacAlgorithm::signFinal(dummy);
@@ -77,18 +78,18 @@ bool BotanMacAlgorithm::signInit(const SymmetricKey* key)
 	// Allocate the context
 	try
 	{
-		hmac = new Botan::HMAC(Botan::get_hash(hashName));
-		hmac->set_key(key->getKeyBits().const_byte_str(), key->getKeyBits().size());
+		mac = Botan::MessageAuthenticationCode::create_or_throw(macName).release();
+		mac->set_key(key->getKeyBits().const_byte_str(), key->getKeyBits().size());
 	}
-	catch (...)
+	catch (std::exception &e)
 	{
-		ERROR_MSG("Failed to create the sign hmac token");
+		ERROR_MSG("Failed to create the sign mac token: %s", e.what());
 
 		ByteString dummy;
 		MacAlgorithm::signFinal(dummy);
 
-		delete hmac;
-		hmac = NULL;
+		delete mac;
+		mac = NULL;
 
 		return false;
 	}
@@ -100,8 +101,8 @@ bool BotanMacAlgorithm::signUpdate(const ByteString& dataToSign)
 {
 	if (!MacAlgorithm::signUpdate(dataToSign))
 	{
-		delete hmac;
-		hmac = NULL;
+		delete mac;
+		mac = NULL;
 
 		return false;
 	}
@@ -110,19 +111,19 @@ bool BotanMacAlgorithm::signUpdate(const ByteString& dataToSign)
 	{
 		if (dataToSign.size() != 0)
 		{
-			hmac->update(dataToSign.const_byte_str(),
+			mac->update(dataToSign.const_byte_str(),
 				     dataToSign.size());
 		}
 	}
 	catch (...)
 	{
-		ERROR_MSG("Failed to update the sign hmac token");
+		ERROR_MSG("Failed to update the sign mac token");
 
 		ByteString dummy;
 		MacAlgorithm::signFinal(dummy);
 
-		delete hmac;
-		hmac = NULL;
+		delete mac;
+		mac = NULL;
 
 		return false;
 	}
@@ -138,35 +139,27 @@ bool BotanMacAlgorithm::signFinal(ByteString& signature)
 	}
 
 	// Perform the signature operation
-#if BOTAN_VERSION_MINOR == 11
-	Botan::secure_vector<Botan::byte> signResult;
-#else
-	Botan::SecureVector<Botan::byte> signResult;
-#endif
+	Botan::secure_vector<uint8_t> signResult;
 	try
 	{
-		signResult = hmac->final();
+		signResult = mac->final();
 	}
 	catch (...)
 	{
 		ERROR_MSG("Could not sign the data");
 
-		delete hmac;
-		hmac = NULL;
+		delete mac;
+		mac = NULL;
 
 		return false;
 	}
 
 	// Return the result
 	signature.resize(signResult.size());
-#if BOTAN_VERSION_MINOR == 11
 	memcpy(&signature[0], signResult.data(), signResult.size());
-#else
-	memcpy(&signature[0], signResult.begin(), signResult.size());
-#endif
 
-	delete hmac;
-	hmac = NULL;
+	delete mac;
+	mac = NULL;
 
 	return true;
 }
@@ -181,11 +174,11 @@ bool BotanMacAlgorithm::verifyInit(const SymmetricKey* key)
 	}
 
 	// Determine the hash name
-	std::string hashName = getHash();
+	std::string macName = getAlgorithm();
 
-	if (hashName == "")
+	if (macName == "")
 	{
-		ERROR_MSG("Invalid verify hmac hash");
+		ERROR_MSG("Invalid verify mac algorithm");
 
 		ByteString dummy;
 		MacAlgorithm::verifyFinal(dummy);
@@ -196,18 +189,18 @@ bool BotanMacAlgorithm::verifyInit(const SymmetricKey* key)
 	// Allocate the context
 	try
 	{
-		hmac = new Botan::HMAC(Botan::get_hash(hashName));
-		hmac->set_key(key->getKeyBits().const_byte_str(), key->getKeyBits().size());
+		mac = Botan::MessageAuthenticationCode::create_or_throw(macName).release();
+		mac->set_key(key->getKeyBits().const_byte_str(), key->getKeyBits().size());
 	}
-	catch (...)
+	catch (std::exception &e)
 	{
-		ERROR_MSG("Failed to create the verify hmac token");
+		ERROR_MSG("Failed to create the verify mac token: %s", e.what());
 
 		ByteString dummy;
 		MacAlgorithm::verifyFinal(dummy);
 
-		delete hmac;
-		hmac = NULL;
+		delete mac;
+		mac = NULL;
 
 		return false;
 	}
@@ -219,8 +212,8 @@ bool BotanMacAlgorithm::verifyUpdate(const ByteString& originalData)
 {
 	if (!MacAlgorithm::verifyUpdate(originalData))
 	{
-		delete hmac;
-		hmac = NULL;
+		delete mac;
+		mac = NULL;
 
 		return false;
 	}
@@ -229,19 +222,19 @@ bool BotanMacAlgorithm::verifyUpdate(const ByteString& originalData)
 	{
 		if (originalData.size() != 0)
 		{
-			hmac->update(originalData.const_byte_str(),
+			mac->update(originalData.const_byte_str(),
 				     originalData.size());
 		}
 	}
 	catch (...)
 	{
-		ERROR_MSG("Failed to update the verify hmac token");
+		ERROR_MSG("Failed to update the verify mac token");
 
 		ByteString dummy;
 		MacAlgorithm::verifyFinal(dummy);
 
-		delete hmac;
-		hmac = NULL;
+		delete mac;
+		mac = NULL;
 
 		return false;
 	}
@@ -257,21 +250,17 @@ bool BotanMacAlgorithm::verifyFinal(ByteString& signature)
 	}
 
 	// Perform the verify operation
-#if BOTAN_VERSION_MINOR == 11
-	Botan::secure_vector<Botan::byte> macResult;
-#else
-	Botan::SecureVector<Botan::byte> macResult;
-#endif
+	Botan::secure_vector<uint8_t> macResult;
 	try
 	{
-		macResult = hmac->final();
+		macResult = mac->final();
 	}
 	catch (...)
 	{
 		ERROR_MSG("Failed to verify the data");
 
-		delete hmac;
-		hmac = NULL;
+		delete mac;
+		mac = NULL;
 
 		return false;
 	}
@@ -280,18 +269,14 @@ bool BotanMacAlgorithm::verifyFinal(ByteString& signature)
 	{
 		ERROR_MSG("Bad verify result size");
 
-		delete hmac;
-		hmac = NULL;
+		delete mac;
+		mac = NULL;
 
 		return false;
 	}
 
-	delete hmac;
-	hmac = NULL;
+	delete mac;
+	mac = NULL;
 
-#if BOTAN_VERSION_MINOR == 11
-	return memcmp(&signature[0], macResult.data(), macResult.size()) == 0;
-#else
-	return memcmp(&signature[0], macResult.begin(), macResult.size()) == 0;
-#endif
+        return Botan::same_mem(&signature[0], macResult.data(), macResult.size());
 }

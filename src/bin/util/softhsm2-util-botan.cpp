@@ -41,49 +41,74 @@
 #include <iostream>
 #include <fstream>
 
-#include <botan/init.h>
+#include <botan/version.h>
 #include <botan/auto_rng.h>
 #include <botan/pkcs8.h>
 #include <botan/bigint.h>
-#include <botan/version.h>
 #include <botan/der_enc.h>
-
-#if BOTAN_VERSION_CODE < BOTAN_VERSION_CODE_FOR(1,11,14)
-#include <botan/libstate.h>
-bool wasInitialized = false;
-#endif
+#include <botan/oids.h>
 
 // Init Botan
 void crypto_init()
 {
-#if BOTAN_VERSION_CODE < BOTAN_VERSION_CODE_FOR(1,11,14)
-	// The PKCS#11 library might be using Botan
-	// Check if it has already initialized Botan
-	if (Botan::Global_State_Management::global_state_exists())
-	{
-		wasInitialized = true;
-	}
-
-	if (!wasInitialized)
-	{
-		Botan::LibraryInitializer::initialize("thread_safe=true");
-	}
-#else
-	Botan::LibraryInitializer::initialize("thread_safe=true");
-#endif
 }
 
 // Final Botan
 void crypto_final()
 {
-#if BOTAN_VERSION_CODE < BOTAN_VERSION_CODE_FOR(1,11,14)
-	if (!wasInitialized)
+}
+
+// Import a aes secret key from given path
+int crypto_import_aes_key
+(
+	CK_SESSION_HANDLE hSession,
+	char* filePath,
+	char* label,
+	char* objID,
+	size_t objIDLen
+)
+{
+	const size_t cMaxAesKeySize = 1024 + 1; // including null-character
+	char aesKeyValue[cMaxAesKeySize];
+	FILE* fp = fopen(filePath, "rb");
+	if (fp == NULL)
 	{
-		Botan::LibraryInitializer::deinitialize();
+		fprintf(stderr, "ERROR: Could not open the secret key file.\n");
+		return 1;
 	}
-#else
-	Botan::LibraryInitializer::deinitialize();
-#endif
+	if (fgets(aesKeyValue, cMaxAesKeySize, fp) == NULL)
+	{
+		fprintf(stderr, "ERROR: Could not read the secret key file.\n");
+		fclose(fp);
+		return 1;
+	}
+	fclose(fp);
+
+	CK_BBOOL ckTrue = CK_TRUE;
+	CK_OBJECT_CLASS keyClass = CKO_SECRET_KEY;
+	CK_KEY_TYPE keyType = CKK_AES;
+	CK_ATTRIBUTE keyTemplate[] = {
+		{ CKA_CLASS,            &keyClass,    sizeof(keyClass) },
+		{ CKA_KEY_TYPE,         &keyType,     sizeof(keyType) },
+		{ CKA_LABEL,            label,        strlen(label) },
+		{ CKA_ID,               objID,        objIDLen },
+		{ CKA_TOKEN,            &ckTrue,      sizeof(ckTrue) },
+		{ CKA_ENCRYPT,          &ckTrue,      sizeof(ckTrue) },
+		{ CKA_DECRYPT,          &ckTrue,      sizeof(ckTrue) },
+		{ CKA_SENSITIVE,        &ckTrue,      sizeof(ckTrue) },
+        	{ CKA_VALUE,		&aesKeyValue, strlen(aesKeyValue) }
+	};
+
+	CK_OBJECT_HANDLE hKey;
+	CK_RV rv = p11->C_CreateObject(hSession, keyTemplate, 9, &hKey);
+	if (rv != CKR_OK)
+	{
+		fprintf(stderr, "ERROR: Could not save the secret key in the token. "
+				"Maybe the algorithm is not supported.\n");
+		return 1;
+	}
+
+	return 0;
 }
 
 // Import a key pair from given path
@@ -109,6 +134,10 @@ int crypto_import_key_pair
 #ifdef WITH_ECC
 	Botan::ECDSA_PrivateKey* ecdsa = NULL;
 #endif
+#ifdef WITH_EDDSA
+	Botan::Curve25519_PrivateKey* x25519 = NULL;
+	Botan::Ed25519_PrivateKey* ed25519 = NULL;
+#endif
 
 	if (pkey->algo_name().compare("RSA") == 0)
 	{
@@ -122,6 +151,16 @@ int crypto_import_key_pair
 	else if (pkey->algo_name().compare("ECDSA") == 0)
 	{
 		ecdsa = dynamic_cast<Botan::ECDSA_PrivateKey*>(pkey);
+	}
+#endif
+#ifdef WITH_EDDSA
+	else if (pkey->algo_name().compare("Curve25519") == 0)
+	{
+		x25519 = dynamic_cast<Botan::Curve25519_PrivateKey*>(pkey);
+	}
+	else if (pkey->algo_name().compare("Ed25519") == 0)
+	{
+		ed25519 = dynamic_cast<Botan::Ed25519_PrivateKey*>(pkey);
 	}
 #endif
 	else
@@ -148,6 +187,16 @@ int crypto_import_key_pair
 		result = crypto_save_ecdsa(hSession, label, objID, objIDLen, noPublicKey, ecdsa);
 	}
 #endif
+#ifdef WITH_EDDSA
+	else if (x25519)
+	{
+		result = crypto_save_eddsa(hSession, label, objID, objIDLen, noPublicKey, x25519, 0);
+	}
+	else if (ed25519)
+	{
+		result = crypto_save_eddsa(hSession, label, objID, objIDLen, noPublicKey, 0, ed25519);
+	}
+#endif
 	else
 	{
 		fprintf(stderr, "ERROR: Could not get the key material.\n");
@@ -171,7 +220,6 @@ Botan::Private_Key* crypto_read_file(char* filePath, char* filePIN)
 
 	try
 	{
-#if BOTAN_VERSION_MINOR == 11
 		if (filePIN == NULL)
 		{
 			pkey = Botan::PKCS8::load_key(std::string(filePath), *rng);
@@ -180,16 +228,6 @@ Botan::Private_Key* crypto_read_file(char* filePath, char* filePIN)
 		{
 			pkey = Botan::PKCS8::load_key(std::string(filePath), *rng, std::string(filePIN));
 		}
-#else
-		if (filePIN == NULL)
-		{
-			pkey = Botan::PKCS8::load_key(filePath, *rng);
-		}
-		else
-		{
-			pkey = Botan::PKCS8::load_key(filePath, *rng, filePIN);
-		}
-#endif
 	}
 	catch (std::exception& e)
 	{
@@ -591,21 +629,15 @@ ecdsa_key_material_t* crypto_malloc_ecdsa(Botan::ECDSA_PrivateKey* ecdsa)
 		return NULL;
 	}
 
-#if BOTAN_VERSION_MINOR == 11
 	std::vector<Botan::byte> derEC = ecdsa->domain().DER_encode(Botan::EC_DOMPAR_ENC_OID);
 	Botan::secure_vector<Botan::byte> derPoint;
-#else
-	Botan::SecureVector<Botan::byte> derEC = ecdsa->domain().DER_encode(Botan::EC_DOMPAR_ENC_OID);
-	Botan::SecureVector<Botan::byte> derPoint;
-#endif
 
 	try
 	{
-#if BOTAN_VERSION_MINOR == 11
-		Botan::secure_vector<Botan::byte> repr = Botan::EC2OSP(ecdsa->public_point(),
-			Botan::PointGFp::UNCOMPRESSED);
+#if BOTAN_VERSION_CODE >= BOTAN_VERSION_CODE_FOR(2,5,0)
+		std::vector<uint8_t> repr = ecdsa->public_point().encode(Botan::PointGFp::UNCOMPRESSED);
 #else
-		Botan::SecureVector<Botan::byte> repr = Botan::EC2OSP(ecdsa->public_point(),
+		Botan::secure_vector<Botan::byte> repr = Botan::EC2OSP(ecdsa->public_point(),
 			Botan::PointGFp::UNCOMPRESSED);
 #endif
 
@@ -646,6 +678,159 @@ void crypto_free_ecdsa(ecdsa_key_material_t* keyMat)
 	if (keyMat->derParams) free(keyMat->derParams);
 	if (keyMat->bigD) free(keyMat->bigD);
 	if (keyMat->derQ) free(keyMat->derQ);
+	free(keyMat);
+}
+#endif
+
+#ifdef WITH_EDDSA
+// Save the key data in PKCS#11
+int crypto_save_eddsa
+(
+	CK_SESSION_HANDLE hSession,
+	char* label,
+	char* objID,
+	size_t objIDLen,
+	int noPublicKey,
+	Botan::Curve25519_PrivateKey* x25519,
+	Botan::Ed25519_PrivateKey* ed25519
+)
+{
+	eddsa_key_material_t* keyMat = crypto_malloc_eddsa(x25519, ed25519);
+	if (keyMat == NULL)
+	{
+		fprintf(stderr, "ERROR: Could not convert the key material to binary information.\n");
+		return 1;
+	}
+
+	CK_OBJECT_CLASS pubClass = CKO_PUBLIC_KEY, privClass = CKO_PRIVATE_KEY;
+	CK_KEY_TYPE keyType = CKK_EC_EDWARDS;
+	CK_BBOOL ckTrue = CK_TRUE, ckFalse = CK_FALSE, ckToken = CK_TRUE;
+	if (noPublicKey)
+	{
+		ckToken = CK_FALSE;
+	}
+	CK_ATTRIBUTE pubTemplate[] = {
+		{ CKA_CLASS,          &pubClass,         sizeof(pubClass) },
+		{ CKA_KEY_TYPE,       &keyType,          sizeof(keyType) },
+		{ CKA_LABEL,          label,             strlen(label) },
+		{ CKA_ID,             objID,             objIDLen },
+		{ CKA_TOKEN,          &ckToken,          sizeof(ckToken) },
+		{ CKA_VERIFY,         &ckTrue,           sizeof(ckTrue) },
+		{ CKA_ENCRYPT,        &ckFalse,          sizeof(ckFalse) },
+		{ CKA_WRAP,           &ckFalse,          sizeof(ckFalse) },
+		{ CKA_EC_PARAMS,      keyMat->derOID,    keyMat->sizeOID },
+		{ CKA_EC_POINT,       keyMat->bigA,      keyMat->sizeA },
+	};
+	CK_ATTRIBUTE privTemplate[] = {
+		{ CKA_CLASS,          &privClass,        sizeof(privClass) },
+		{ CKA_KEY_TYPE,       &keyType,          sizeof(keyType) },
+		{ CKA_LABEL,          label,             strlen(label) },
+		{ CKA_ID,             objID,             objIDLen },
+		{ CKA_SIGN,           &ckTrue,           sizeof(ckTrue) },
+		{ CKA_DECRYPT,        &ckFalse,          sizeof(ckFalse) },
+		{ CKA_UNWRAP,         &ckFalse,          sizeof(ckFalse) },
+		{ CKA_SENSITIVE,      &ckTrue,           sizeof(ckTrue) },
+		{ CKA_TOKEN,          &ckTrue,           sizeof(ckTrue) },
+		{ CKA_PRIVATE,        &ckTrue,           sizeof(ckTrue) },
+		{ CKA_EXTRACTABLE,    &ckFalse,          sizeof(ckFalse) },
+		{ CKA_EC_PARAMS,      keyMat->derOID,    keyMat->sizeOID },
+		{ CKA_VALUE,          keyMat->bigK,      keyMat->sizeK }
+	};
+
+	CK_OBJECT_HANDLE hKey1, hKey2;
+	CK_RV rv = p11->C_CreateObject(hSession, privTemplate, 13, &hKey1);
+	if (rv != CKR_OK)
+	{
+		fprintf(stderr, "ERROR: Could not save the private key in the token. "
+				"Maybe the algorithm is not supported.\n");
+		crypto_free_eddsa(keyMat);
+		return 1;
+	}
+
+	rv = p11->C_CreateObject(hSession, pubTemplate, 10, &hKey2);
+	crypto_free_eddsa(keyMat);
+
+	if (rv != CKR_OK)
+	{
+		p11->C_DestroyObject(hSession, hKey1);
+		fprintf(stderr, "ERROR: Could not save the public key in the token.\n");
+		return 1;
+	}
+
+	printf("The key pair has been imported.\n");
+
+	return 0;
+}
+
+// Convert the OpenSSL key to binary
+eddsa_key_material_t* crypto_malloc_eddsa
+(
+	Botan::Curve25519_PrivateKey* x25519,
+	Botan::Ed25519_PrivateKey* ed25519
+ )
+{
+	if ((x25519 == NULL) && (ed25519 == NULL))
+	{
+		return NULL;
+	}
+
+	eddsa_key_material_t* keyMat = (eddsa_key_material_t*)malloc(sizeof(eddsa_key_material_t));
+	if (keyMat == NULL)
+	{
+		return NULL;
+	}
+
+	Botan::OID oid;
+	if (x25519) oid = Botan::OIDS::lookup("Curve25519");
+	if (ed25519) oid = Botan::OIDS::lookup("Ed25519");
+	if (oid.empty())
+	{
+		return NULL;
+	}
+
+	Botan::secure_vector<Botan::byte> derOID;
+	derOID = Botan::DER_Encoder().encode(oid).get_contents();
+
+	memset(keyMat, 0, sizeof(*keyMat));
+	keyMat->sizeOID = derOID.size();
+	keyMat->derOID = (CK_VOID_PTR)malloc(keyMat->sizeOID);
+
+	std::vector<Botan::byte> pub;
+	if (x25519) pub = x25519->public_value();
+	if (ed25519) pub = ed25519->get_public_key();
+	keyMat->sizeA = pub.size();
+	keyMat->bigA = (CK_VOID_PTR)malloc(keyMat->sizeA);
+
+	Botan::secure_vector<Botan::byte> priv;
+	if (x25519) priv = x25519->get_x();
+	if (ed25519)
+	{
+		priv = ed25519->get_private_key();
+		priv.resize(32);
+	}
+	keyMat->sizeK = priv.size();
+	keyMat->bigK = (CK_VOID_PTR)malloc(keyMat->sizeK);
+
+	if (!keyMat->derOID || !keyMat->bigK || !keyMat->bigA)
+	{
+		crypto_free_eddsa(keyMat);
+		return NULL;
+	}
+
+	memcpy(keyMat->derOID, derOID.data(), keyMat->sizeOID);
+	memcpy(keyMat->bigA, pub.data(), keyMat->sizeA);
+	memcpy(keyMat->bigK, priv.data(), keyMat->sizeK);
+
+	return keyMat;
+}
+
+// Free the memory of the key
+void crypto_free_eddsa(eddsa_key_material_t* keyMat)
+{
+	if (keyMat == NULL) return;
+	if (keyMat->derOID) free(keyMat->derOID);
+	if (keyMat->bigK) free(keyMat->bigK);
+	if (keyMat->bigA) free(keyMat->bigA);
 	free(keyMat);
 }
 #endif

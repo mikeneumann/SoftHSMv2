@@ -3,7 +3,7 @@
 SoftHSM is part of the OpenDNSSEC project. Read more at www.opendnssec.org.
 
 [![Travis Build Status](https://api.travis-ci.org/opendnssec/SoftHSMv2.png)](https://travis-ci.org/opendnssec/SoftHSMv2)
-[![AppVeyor Build Status](https://ci.appveyor.com/api/projects/status/github/opendnssec/SoftHSMv2?svg=true)](https://ci.appveyor.com/project/bellgrim/softhsmv2)
+[![AppVeyor Build Status](https://ci.appveyor.com/api/projects/status/github/opendnssec/SoftHSMv2?svg=true)](https://ci.appveyor.com/project/opendnssec/softhsmv2)
 
 ## Introduction
 
@@ -35,25 +35,42 @@ because of the PKCS#11 interface.
 SoftHSM depends on a cryptographic library, Botan or OpenSSL.
 Minimum required versions:
 
-- Botan 1.10.0 
+- Botan 2.0.0
 - OpenSSL 1.0.0
 
-If you are using Botan, make sure that it has support for GNU MP (--with-gnump).
-This will improve the performance when doing public key operations.
+If you are using Botan, use at least version 2.6.0. This will improve
+the performance when doing public key operations.
 
-The GNU Autotools are also required for building the software.
+The GNU Autotools (Autoconf, Automake, Libtool) are also required for building
+the software. It is also recommended to install pkg-config so that the
+configure script can find the installed software.
 
 There is a migration tool for converting token databases from SoftHSMv1 into
-the new type of tokens. If this tool is built, then SQLite3 is required (>=
-3.4.2).
+the new type of tokens. If this tool is built (--with-migrate), then SQLite3
+is required (>= 3.4.2).
+
+SQLite3 is also required if building with the database object store
+(--with-objectstore-backend-db).
+
+To install SoftHSM as a PKCS#11 module on the system, please install
+libp11-kit-dev.
+
+The unit tests requires CppUnit.
 
 ## Installation
+
+### Building from the repository
+
+If the code is downloaded directly from the code repository, you have to
+prepare the configuration scripts before continuing.
+
+1. You need to install automake, autoconf, libtool, libtool-ltdl-devel (RHEL/CentOS), pkg-config.
+2. Run the command 'sh autogen.sh'
 
 ### Configure
 
 Configure the installation/compilation scripts:
 
-	sh ./autogen.sh
 	./configure
 
 Options:
@@ -61,8 +78,9 @@ Options:
 	--disable-non-paged-memory
 				Disable non-paged memory for secure storage
 				(default enabled)
-	--disable-ecc		Disable support for ECC (default enabled)
-	--disable-gost		Disable support for GOST (default enabled)
+	--enable-ecc		Enable support for ECC (default detect)
+	--enable-gost		Enable support for GOST (default detect)
+	--enable-eddsa		Enable support for EDDSA (default detect)
 	--disable-visibility	Disable hidden visibilty link mode [enabled]
 	--with-crypto-backend	Select crypto backend (openssl|botan)
 	--with-openssl=PATH	Specify prefix of path of OpenSSL
@@ -86,6 +104,12 @@ For more options:
 Compile the source code using the following command:
 
 	make
+
+### Unit tests
+
+Running the unit tests requires CppUnit.
+
+	make check
 
 ### Install Library
 
@@ -117,6 +141,10 @@ it can interact with the token.
 Type in SO PIN and user PIN. Once a token has been initialized, more slots will
 be added automatically with a new uninitialized token.
 
+Initialized tokens will be reassigned to another slot (based on the token
+serial number). It is recommended to find and interact with the token by
+searching for the token label or serial number in the slot list / token info.
+
 ### Link
 
 Link to this library and use the PKCS#11 interface.
@@ -128,11 +156,8 @@ All of the tokens and their objects are stored in the location given by
 softhsm2.conf. Backup can thus be done as a regular file copy.
 
 
-## Building from the repository
+## Log information
 
-If the code is downloaded directly from the code repository, you have to
-prepare the configuration scripts before continuing with the real README.
-
-1. You need to install automake, autoconf, libtool, etc.
-2. Run the command 'sh autogen.sh'
-3. Continue reading this README.
+Log information is sent to syslog or the Windows event log and the log
+level is set in the configuration file. Each log event is prepended with
+the source file name and line number.

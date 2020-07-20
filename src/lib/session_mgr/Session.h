@@ -85,6 +85,8 @@ public:
 	// Digest
 	void setDigestOp(HashAlgorithm* inDigestOp);
 	HashAlgorithm* getDigestOp();
+	void setHashAlgo(HashAlgo::Type inHashAlgo);
+	HashAlgo::Type getHashAlgo();
 
 	// Mac
 	void setMacOp(MacAlgorithm* inMacOp);
@@ -103,6 +105,9 @@ public:
 
 	void setParameters(void* inParam, size_t inParamLen);
 	void* getParameters(size_t& inParamLen);
+
+	void setReAuthentication(bool inReAuthentication);
+	bool getReAuthentication();
 
 	void setAllowMultiPartOp(bool inAllowMultiPartOp);
 	bool getAllowMultiPartOp();
@@ -143,6 +148,7 @@ private:
 
 	// Digest
 	HashAlgorithm* digestOp;
+	HashAlgo::Type hashAlgo;
 
 	// Mac
 	MacAlgorithm* macOp;
@@ -156,6 +162,7 @@ private:
 	AsymMech::Type mechanism;
 	void* param;
 	size_t paramLen;
+	bool reAuthentication;
 	bool allowMultiPartOp;
 	bool allowSinglePartOp;
 	PublicKey* publicKey;

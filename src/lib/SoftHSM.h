@@ -46,6 +46,8 @@
 #include "DSAPrivateKey.h"
 #include "ECPublicKey.h"
 #include "ECPrivateKey.h"
+#include "EDPublicKey.h"
+#include "EDPrivateKey.h"
 #include "DHPublicKey.h"
 #include "DHPrivateKey.h"
 #include "GOSTPublicKey.h"
@@ -191,6 +193,13 @@ private:
 	SessionManager* sessionManager;
 	HandleManager* handleManager;
 
+	// A list with the supported mechanisms
+	std::map<std::string, CK_MECHANISM_TYPE> mechanisms_table;
+	std::list<CK_MECHANISM_TYPE> supportedMechanisms;
+	CK_ULONG nrSupportedMechanisms;
+
+	int forkID;
+
 	// Encrypt/Decrypt variants
 	CK_RV SymEncryptInit(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism, CK_OBJECT_HANDLE hKey);
 	CK_RV AsymEncryptInit(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism, CK_OBJECT_HANDLE hKey);
@@ -290,6 +299,20 @@ private:
 		CK_BBOOL isPrivateKeyOnToken,
 		CK_BBOOL isPrivateKeyPrivate
 	);
+	CK_RV generateED
+	(
+		CK_SESSION_HANDLE hSession,
+		CK_ATTRIBUTE_PTR pPublicKeyTemplate,
+		CK_ULONG ulPublicKeyAttributeCount,
+		CK_ATTRIBUTE_PTR pPrivateKeyTemplate,
+		CK_ULONG ulPrivateKeyAttributeCount,
+		CK_OBJECT_HANDLE_PTR phPublicKey,
+		CK_OBJECT_HANDLE_PTR phPrivateKey,
+		CK_BBOOL isPublicKeyOnToken,
+		CK_BBOOL isPublicKeyPrivate,
+		CK_BBOOL isPrivateKeyOnToken,
+		CK_BBOOL isPrivateKeyPrivate
+	);
 	CK_RV generateDH
 	(
 		CK_SESSION_HANDLE hSession,
@@ -327,6 +350,15 @@ private:
 		CK_BBOOL isPrivateKeyOnToken,
 		CK_BBOOL isPrivateKeyPrivate
 	);
+	CK_RV generateGeneric
+	(
+		CK_SESSION_HANDLE hSession,
+		CK_ATTRIBUTE_PTR pTemplate,
+		CK_ULONG ulCount,
+		CK_OBJECT_HANDLE_PTR phKey,
+		CK_BBOOL isOnToken,
+		CK_BBOOL isPrivate
+	);
 	CK_RV deriveDH
 	(
 		CK_SESSION_HANDLE hSession,
@@ -339,6 +371,7 @@ private:
 		CK_BBOOL isOnToken,
 		CK_BBOOL isPrivate
 	);
+#ifdef WITH_ECC
 	CK_RV deriveECDH
 	(
 		CK_SESSION_HANDLE hSession,
@@ -351,6 +384,21 @@ private:
 		CK_BBOOL isOnToken,
 		CK_BBOOL isPrivate
 	);
+#endif
+#ifdef WITH_EDDSA
+	CK_RV deriveEDDSA
+	(
+		CK_SESSION_HANDLE hSession,
+		CK_MECHANISM_PTR pMechanism,
+		CK_OBJECT_HANDLE hBaseKey,
+		CK_ATTRIBUTE_PTR pTemplate,
+		CK_ULONG ulCount,
+		CK_OBJECT_HANDLE_PTR phKey,
+		CK_KEY_TYPE keyType,
+		CK_BBOOL isOnToken,
+		CK_BBOOL isPrivate
+	);
+#endif
 	CK_RV deriveSymmetric
 	(
 		CK_SESSION_HANDLE hSession,
@@ -378,17 +426,23 @@ private:
 	CK_RV getDSAPublicKey(DSAPublicKey* publicKey, Token* token, OSObject* key);
 	CK_RV getECPrivateKey(ECPrivateKey* privateKey, Token* token, OSObject* key);
 	CK_RV getECPublicKey(ECPublicKey* publicKey, Token* token, OSObject* key);
+	CK_RV getEDPrivateKey(EDPrivateKey* privateKey, Token* token, OSObject* key);
+	CK_RV getEDPublicKey(EDPublicKey* publicKey, Token* token, OSObject* key);
 	CK_RV getDHPrivateKey(DHPrivateKey* privateKey, Token* token, OSObject* key);
 	CK_RV getDHPublicKey(DHPublicKey* publicKey, DHPrivateKey* privateKey, ByteString& pubParams);
 	CK_RV getECDHPublicKey(ECPublicKey* publicKey, ECPrivateKey* privateKey, ByteString& pubData);
+	CK_RV getEDDHPublicKey(EDPublicKey* publicKey, EDPrivateKey* privateKey, ByteString& pubData);
 	CK_RV getGOSTPrivateKey(GOSTPrivateKey* privateKey, Token* token, OSObject* key);
 	CK_RV getGOSTPublicKey(GOSTPublicKey* publicKey, Token* token, OSObject* key);
 	CK_RV getSymmetricKey(SymmetricKey* skey, Token* token, OSObject* key);
+
+	ByteString getECDHPubData(ByteString& pubData);
 
 	bool setRSAPrivateKey(OSObject* key, const ByteString &ber, Token* token, bool isPrivate) const;
 	bool setDSAPrivateKey(OSObject* key, const ByteString &ber, Token* token, bool isPrivate) const;
 	bool setDHPrivateKey(OSObject* key, const ByteString &ber, Token* token, bool isPrivate) const;
 	bool setECPrivateKey(OSObject* key, const ByteString &ber, Token* token, bool isPrivate) const;
+	bool setGOSTPrivateKey(OSObject* key, const ByteString &ber, Token* token, bool isPrivate) const;
 
 
 	CK_RV WrapKeyAsym
@@ -428,5 +482,9 @@ private:
 	);
 
 	CK_RV MechParamCheckRSAPKCSOAEP(CK_MECHANISM_PTR pMechanism);
+
+	bool isMechanismPermitted(OSObject* key, CK_MECHANISM_PTR pMechanism);
+	void prepareSupportedMecahnisms(std::map<std::string, CK_MECHANISM_TYPE> &t);
+	bool detectFork(void);
 };
 

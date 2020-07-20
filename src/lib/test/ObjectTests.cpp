@@ -79,6 +79,7 @@ const CK_BBOOL CKA_TOKEN_DEFAULT = CK_FALSE;
 const CK_BBOOL CKA_MODIFIABLE_DEFAULT = CK_TRUE;
 const CK_UTF8CHAR_PTR CKA_LABEL_DEFAULT = NULL;
 const CK_BBOOL CKA_COPYABLE_DEFAULT = CK_TRUE;
+const CK_BBOOL CKA_DESTROYABLE_DEFAULT = CK_TRUE;
 
 // Data Object Attributes
 const CK_UTF8CHAR_PTR CKA_APPLICATION_DEFAULT = NULL;
@@ -110,7 +111,7 @@ void ObjectTests::checkCommonObjectAttributes(CK_SESSION_HANDLE hSession, CK_OBJ
 	CPPUNIT_ASSERT(obj_class == objClass);
 }
 
-void ObjectTests::checkCommonStorageObjectAttributes(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject, CK_BBOOL bToken, CK_BBOOL /*bPrivate*/, CK_BBOOL bModifiable, CK_UTF8CHAR_PTR pLabel, CK_ULONG ulLabelLen, CK_BBOOL bCopyable)
+void ObjectTests::checkCommonStorageObjectAttributes(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject, CK_BBOOL bToken, CK_BBOOL /*bPrivate*/, CK_BBOOL bModifiable, CK_UTF8CHAR_PTR pLabel, CK_ULONG ulLabelLen, CK_BBOOL bCopyable, CK_BBOOL bDestroyable)
 {
 	CK_RV rv;
 
@@ -118,12 +119,14 @@ void ObjectTests::checkCommonStorageObjectAttributes(CK_SESSION_HANDLE hSession,
 	CK_BBOOL obj_private = CK_FALSE;
 	CK_BBOOL obj_modifiable = CK_FALSE;
 	CK_BBOOL obj_copyable = CK_FALSE;
+	CK_BBOOL obj_destroyable = CK_FALSE;
 	CK_ATTRIBUTE attribs[] = {
 		{ CKA_LABEL, NULL_PTR, 0 },
 		{ CKA_TOKEN, &obj_token, sizeof(obj_token) },
 		{ CKA_PRIVATE, &obj_private, sizeof(obj_private) },
 		{ CKA_MODIFIABLE, &obj_modifiable, sizeof(obj_modifiable) },
-		{ CKA_COPYABLE, &obj_copyable, sizeof(obj_copyable) }
+		{ CKA_COPYABLE, &obj_copyable, sizeof(obj_copyable) },
+		{ CKA_DESTROYABLE, &obj_destroyable, sizeof(obj_destroyable) }
 	};
 
 	// Get length
@@ -132,7 +135,7 @@ void ObjectTests::checkCommonStorageObjectAttributes(CK_SESSION_HANDLE hSession,
 	attribs[0].pValue = (CK_VOID_PTR)malloc(attribs[0].ulValueLen);
 
 	// Check values
-	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hObject, &attribs[0], 5) );
+	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hObject, &attribs[0], 6) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	CPPUNIT_ASSERT(attribs[0].ulValueLen == ulLabelLen);
 	CPPUNIT_ASSERT(obj_token == bToken);
@@ -140,6 +143,7 @@ void ObjectTests::checkCommonStorageObjectAttributes(CK_SESSION_HANDLE hSession,
 	CPPUNIT_ASSERT(obj_private == bPrivate); */
 	CPPUNIT_ASSERT(obj_modifiable == bModifiable);
 	CPPUNIT_ASSERT(obj_copyable == bCopyable);
+	CPPUNIT_ASSERT(obj_destroyable == bDestroyable);
 	if (ulLabelLen > 0)
 		CPPUNIT_ASSERT(memcmp(attribs[0].pValue, pLabel, ulLabelLen) == 0);
 
@@ -294,7 +298,7 @@ void ObjectTests::checkX509CertificateObjectAttributes(CK_SESSION_HANDLE hSessio
 	free(attribs[7].pValue);
 }
 
-void ObjectTests::checkCommonKeyAttributes(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject, CK_KEY_TYPE keyType, CK_BYTE_PTR pId, CK_ULONG ulIdLen, CK_DATE startDate, CK_ULONG ulStartDateLen, CK_DATE endDate, CK_ULONG ulEndDateLen, CK_BBOOL bDerive, CK_BBOOL bLocal, CK_MECHANISM_TYPE keyMechanismType, CK_MECHANISM_TYPE_PTR /*pAllowedMechanisms*/, CK_ULONG /*ulAllowedMechanismsLen*/)
+void ObjectTests::checkCommonKeyAttributes(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject, CK_KEY_TYPE keyType, CK_BYTE_PTR pId, CK_ULONG ulIdLen, CK_DATE startDate, CK_ULONG ulStartDateLen, CK_DATE endDate, CK_ULONG ulEndDateLen, CK_BBOOL bDerive, CK_BBOOL bLocal, CK_MECHANISM_TYPE keyMechanismType, CK_MECHANISM_TYPE_PTR pAllowedMechanisms, CK_ULONG ulAllowedMechanismsLen)
 {
 	CK_RV rv;
 
@@ -306,14 +310,13 @@ void ObjectTests::checkCommonKeyAttributes(CK_SESSION_HANDLE hSession, CK_OBJECT
 	CK_MECHANISM_TYPE obj_mech = CKM_VENDOR_DEFINED;
 	CK_ATTRIBUTE attribs[] = {
 		{ CKA_ID, NULL_PTR, 0 },
-		/* Not supported
-		{ CKA_ALLOWED_MECHANISMS, NULL_PTR, 0 }, */
 		{ CKA_KEY_TYPE, &obj_type, sizeof(obj_type) },
 		{ CKA_START_DATE, &obj_start, sizeof(obj_start) },
 		{ CKA_END_DATE, &obj_end, sizeof(obj_end) },
 		{ CKA_DERIVE, &obj_derive, sizeof(obj_derive) },
 		{ CKA_LOCAL, &obj_local, sizeof(obj_local) },
-		{ CKA_KEY_GEN_MECHANISM, &obj_mech, sizeof(obj_mech) }
+		{ CKA_KEY_GEN_MECHANISM, &obj_mech, sizeof(obj_mech) },
+		{ CKA_ALLOWED_MECHANISMS, NULL_PTR, 0 }
 	};
 
 	// Get length
@@ -322,7 +325,7 @@ void ObjectTests::checkCommonKeyAttributes(CK_SESSION_HANDLE hSession, CK_OBJECT
 	attribs[0].pValue = (CK_VOID_PTR)malloc(attribs[0].ulValueLen);
 
 	// Check values
-	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hObject, &attribs[0], 7) );
+	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hObject, &attribs[0], 8) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	CPPUNIT_ASSERT(attribs[0].ulValueLen == ulIdLen);
 	CPPUNIT_ASSERT(obj_type == keyType);
@@ -331,12 +334,16 @@ void ObjectTests::checkCommonKeyAttributes(CK_SESSION_HANDLE hSession, CK_OBJECT
 	CPPUNIT_ASSERT(obj_derive == bDerive);
 	CPPUNIT_ASSERT(obj_local == bLocal);
 	CPPUNIT_ASSERT(obj_mech == keyMechanismType);
+	CPPUNIT_ASSERT(attribs[7].ulValueLen == ulAllowedMechanismsLen);
+
 	if (ulIdLen > 0)
 		CPPUNIT_ASSERT(memcmp(attribs[0].pValue, pId, ulIdLen) == 0);
 	if (ulStartDateLen > 0)
-		CPPUNIT_ASSERT(memcmp(attribs[3].pValue, &startDate, ulStartDateLen) == 0);
+		CPPUNIT_ASSERT(memcmp(attribs[2].pValue, &startDate, ulStartDateLen) == 0);
 	if (ulEndDateLen > 0)
-		CPPUNIT_ASSERT(memcmp(attribs[4].pValue, &endDate, ulEndDateLen) == 0);
+		CPPUNIT_ASSERT(memcmp(attribs[3].pValue, &endDate, ulEndDateLen) == 0);
+	if (ulAllowedMechanismsLen > 0)
+		CPPUNIT_ASSERT(memcmp(attribs[7].pValue, pAllowedMechanisms, ulAllowedMechanismsLen) == 0);
 
 	free(attribs[0].pValue);
 }
@@ -523,6 +530,30 @@ CK_RV ObjectTests::createDataObjectMinimal(CK_SESSION_HANDLE hSession, CK_BBOOL 
 		//CKA_MODIFIABLE
 		{ CKA_LABEL, label, sizeof(label)-1 },
 		//CKA_COPYABLE
+		//CKA_DESTROYABLE
+
+		// Data
+	 };
+
+	hObject = CK_INVALID_HANDLE;
+	return CRYPTOKI_F_PTR( C_CreateObject(hSession, objTemplate, sizeof(objTemplate)/sizeof(CK_ATTRIBUTE),&hObject) );
+}
+
+CK_RV ObjectTests::createDataObjectMCD(CK_SESSION_HANDLE hSession, CK_BBOOL bToken, CK_BBOOL bPrivate, CK_BBOOL bModifiable, CK_BBOOL bCopyable, CK_BBOOL bDestroyable, CK_OBJECT_HANDLE &hObject)
+{
+	CK_OBJECT_CLASS cClass = CKO_DATA;
+	CK_UTF8CHAR label[] = "A data object";
+	CK_ATTRIBUTE objTemplate[] = {
+		// Common
+		{ CKA_CLASS, &cClass, sizeof(cClass) },
+
+		// Storage
+		{ CKA_TOKEN, &bToken, sizeof(bToken) },
+		{ CKA_PRIVATE, &bPrivate, sizeof(bPrivate) },
+		{ CKA_MODIFIABLE, &bModifiable, sizeof(bModifiable) },
+		{ CKA_LABEL, label, sizeof(label)-1 },
+		{ CKA_COPYABLE, &bCopyable, sizeof(bCopyable) },
+		{ CKA_DESTROYABLE, &bDestroyable, sizeof(bDestroyable) }
 
 		// Data
 	 };
@@ -550,6 +581,7 @@ CK_RV ObjectTests::createDataObjectNormal(CK_SESSION_HANDLE hSession, CK_BBOOL b
 		//CKA_MODIFIABLE
 		{ CKA_LABEL, label, sizeof(label)-1 },
 		//CKA_COPYABLE
+		//CKA_DESTROYABLE
 
 		// Data
 		{ CKA_APPLICATION, application, sizeof(application)-1 },
@@ -641,7 +673,7 @@ void ObjectTests::testCreateObject()
 {
 //    printf("\ntestCreateObject\n");
 
-	// [PKCS#11 v2.3 p126]
+	// [PKCS#11 v2.40, C_CreateObject]
 	// a. Only session objects can be created during read-only session.
 	// b. Only public objects can be created unless the normal user is logged in.
 	// c. Key object will have CKA_LOCAL == CK_FALSE.
@@ -657,6 +689,10 @@ void ObjectTests::testCreateObject()
 	CK_KEY_TYPE genKeyType = CKK_GENERIC_SECRET;
 	CK_BYTE keyPtr[128];
 	CK_ULONG keyLen = 128;
+	CK_MECHANISM_TYPE allowedMechs[] = {
+		CKM_RSA_PKCS_PSS,
+		CKM_SHA256_RSA_PKCS_PSS
+	};
 	CK_ATTRIBUTE attribs[] = {
 		{ CKA_EXTRACTABLE, &bFalse, sizeof(bFalse) },
 		{ CKA_CLASS, &secretClass, sizeof(secretClass) },
@@ -664,16 +700,19 @@ void ObjectTests::testCreateObject()
 		{ CKA_TOKEN, &bFalse, sizeof(bFalse) },
 		{ CKA_PRIVATE, &bTrue, sizeof(bTrue) },
 		{ CKA_SENSITIVE, &bTrue, sizeof(bTrue) },
-		{ CKA_VALUE, keyPtr, keyLen }
+		{ CKA_VALUE, keyPtr, keyLen },
+		{ CKA_ALLOWED_MECHANISMS, &allowedMechs, sizeof(allowedMechs) }
 	};
 
 	CK_BBOOL local;
 	CK_BBOOL always;
 	CK_BBOOL never;
+	CK_MECHANISM_TYPE mechs[2] = {};
 	CK_ATTRIBUTE getTemplate[] = {
 		{ CKA_LOCAL, &local, sizeof(local) },
 		{ CKA_ALWAYS_SENSITIVE, &always, sizeof(always) },
-		{ CKA_NEVER_EXTRACTABLE, &never, sizeof(never) }
+		{ CKA_NEVER_EXTRACTABLE, &never, sizeof(never) },
+		{ CKA_ALLOWED_MECHANISMS, &mechs, sizeof(mechs) }
 	};
 
 	// Just make sure that we finalize any previous tests
@@ -698,7 +737,6 @@ void ObjectTests::testCreateObject()
 
 	// Only public objects can be created unless the normal user is logged in
 	rv = createDataObjectMinimal(hSession, IN_SESSION, IS_PRIVATE, hObject);
-	// [PKCS#11 v2.3 p97] seems to indicate CKR_OK while [PKCS#11 v2.3 p126] clearly indicates CKR_USER_NOT_LOGGED_IN
 	CPPUNIT_ASSERT(rv == CKR_USER_NOT_LOGGED_IN);
 
 	// We should not be allowed to create token objects because the session is read-only
@@ -751,7 +789,6 @@ void ObjectTests::testCreateObject()
 	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSession,hObject) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
 
-	// [PKCS#11 v2.3 p97] seems to indicate CKR_OK while [PKCS#11 v2.3 p126] clearly indicates CKR_USER_NOT_LOGGED_IN
 	rv = createDataObjectMinimal(hSession, IN_SESSION, IS_PRIVATE, hObject);
 	CPPUNIT_ASSERT(rv ==  CKR_USER_NOT_LOGGED_IN);
 
@@ -864,11 +901,13 @@ void ObjectTests::testCreateObject()
 	CPPUNIT_ASSERT(rv == CKR_OK);
 
 	// Check value
-	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hObject, getTemplate, 3) );
+	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hObject, getTemplate, 4) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	CPPUNIT_ASSERT(local == CK_FALSE);
 	CPPUNIT_ASSERT(always == CK_FALSE);
 	CPPUNIT_ASSERT(never == CK_FALSE);
+	CPPUNIT_ASSERT(sizeof(allowedMechs) == getTemplate[3].ulValueLen);
+	CPPUNIT_ASSERT(memcmp(&allowedMechs, &mechs, sizeof(allowedMechs)) == 0);
 
 	// Destroy the secret object
 	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSession,hObject) );
@@ -886,6 +925,7 @@ void ObjectTests::testCopyObject()
 	CK_RV rv;
 	CK_SESSION_HANDLE hSession;
 	CK_OBJECT_HANDLE hObject;
+	CK_OBJECT_HANDLE hObjectCopy;
 	CK_OBJECT_HANDLE hObject1;
 
 	// Just make sure that we finalize any previous tests
@@ -900,6 +940,8 @@ void ObjectTests::testCopyObject()
 
 	// Get a public session object
 	rv = createDataObjectMinimal(hSession, IN_SESSION, IS_PUBLIC, hObject);
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	rv = createDataObjectMCD(hSession, IN_SESSION, IS_PUBLIC, CK_TRUE, CK_FALSE, CK_TRUE, hObjectCopy);
 	CPPUNIT_ASSERT(rv == CKR_OK);
 
 	// Allowed to copy it
@@ -918,12 +960,18 @@ void ObjectTests::testCopyObject()
 	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSession, hObject1) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
 
+	// Not allowed to copy.
+	rv = CRYPTOKI_F_PTR( C_CopyObject(hSession, hObjectCopy, &attribs[0], 1, &hObject1) );
+	CPPUNIT_ASSERT(rv == CKR_ACTION_PROHIBITED);
+	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSession, hObjectCopy) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
 	// Still allowed when still session and public
 	rv = CRYPTOKI_F_PTR( C_CopyObject(hSession, hObject, &attribs[0], 3, &hObject1) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSession, hObject1) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
-	
+
 	// Not allowed to overwrite an !ck8 attribute
 	rv = CRYPTOKI_F_PTR( C_CopyObject(hSession, hObject, &attribs[0], 4, &hObject1) );
 	CPPUNIT_ASSERT(rv == CKR_ATTRIBUTE_READ_ONLY);
@@ -997,12 +1045,12 @@ void ObjectTests::testDestroyObject()
 {
 //    printf("\ntestDestroyObject\n");
 
-	// [PKCS#11 v2.3 p124] When logout is successful...
+	// [PKCS#11 v2.40, C_Logout] When logout is successful...
 	// a. Any of the application's handles to private objects become invalid.
 	// b. Even if a user is later logged back into the token those handles remain invalid.
 	// c. All private session objects from sessions belonging to the application area destroyed.
 
-	// [PKCS#11 v2.3 p126]
+	// [PKCS#11 v2.40, C_CreateObject]
 	// Only session objects can be created during read-only session.
 	// Only public objects can be created unless the normal user is logged in.
 
@@ -1013,6 +1061,7 @@ void ObjectTests::testDestroyObject()
 	CK_OBJECT_HANDLE hObjectSessionPrivate;
 	CK_OBJECT_HANDLE hObjectTokenPublic;
 	CK_OBJECT_HANDLE hObjectTokenPrivate;
+	CK_OBJECT_HANDLE hObjectDestroy;
 
 	// Just make sure that we finalize any previous tests
 	CRYPTOKI_F_PTR( C_Finalize(NULL_PTR) );
@@ -1058,6 +1107,12 @@ void ObjectTests::testDestroyObject()
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	rv = createDataObjectMinimal(hSessionRW, ON_TOKEN, IS_PRIVATE, hObjectTokenPrivate);
 	CPPUNIT_ASSERT(rv == CKR_OK);
+	rv = createDataObjectMCD(hSessionRW, IN_SESSION, IS_PUBLIC, CK_TRUE, CK_TRUE, CK_FALSE, hObjectDestroy);
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// We should not be able to destroy a non-destroyable object.
+	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSessionRO,hObjectDestroy) );
+	CPPUNIT_ASSERT(rv == CKR_ACTION_PROHIBITED);
 
 	// On a read-only session we should not be able to destroy the public token object
 	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSessionRO,hObjectTokenPublic) );
@@ -1189,8 +1244,7 @@ void ObjectTests::testGetAttributeValue()
 
 void ObjectTests::testSetAttributeValue()
 {
-	// [PKCS#11 v2.3 pg. 61]
-
+	// [PKCS#11 v2.40, 4.1.1 Creating objects]
 	//    1. If the supplied template specifies a value for an invalid attribute, then the attempt
 	//    should fail with the error code CKR_ATTRIBUTE_TYPE_INVALID. An attribute
 	//    is valid if it is either one of the attributes described in the Cryptoki specification or an
@@ -1235,8 +1289,6 @@ void ObjectTests::testSetAttributeValue()
 	//    application developers are strongly encouraged never to put a particular attribute into
 	//    a particular template more than once.
 
-
-
 	CK_RV rv;
 	CK_SESSION_HANDLE hSessionRO;
 	CK_SESSION_HANDLE hSessionRW;
@@ -1244,6 +1296,7 @@ void ObjectTests::testSetAttributeValue()
 	CK_OBJECT_HANDLE hObjectSessionPrivate;
 	CK_OBJECT_HANDLE hObjectTokenPublic;
 	CK_OBJECT_HANDLE hObjectTokenPrivate;
+	CK_OBJECT_HANDLE hObjectSet;
 
 	// Just make sure that we finalize any previous tests
 	CRYPTOKI_F_PTR( C_Finalize(NULL_PTR) );
@@ -1277,6 +1330,8 @@ void ObjectTests::testSetAttributeValue()
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	rv = createDataObjectMinimal(hSessionRW, ON_TOKEN, IS_PRIVATE, hObjectTokenPrivate);
 	CPPUNIT_ASSERT(rv == CKR_OK);
+	rv = createDataObjectMCD(hSessionRO, IN_SESSION, IS_PUBLIC, CK_FALSE, CK_TRUE, CK_TRUE, hObjectSet);
+	CPPUNIT_ASSERT(rv == CKR_OK);
 
 	// Check that label can be modified on all combintations of session/token and public/private objects
 	const char  *pLabel = "Label modified via C_SetAttributeValue";
@@ -1296,6 +1351,8 @@ void ObjectTests::testSetAttributeValue()
 	CPPUNIT_ASSERT(rv == CKR_SESSION_READ_ONLY);
 	rv = CRYPTOKI_F_PTR( C_SetAttributeValue (hSessionRW,hObjectTokenPrivate,&attribs[0],1) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
+	rv = CRYPTOKI_F_PTR( C_SetAttributeValue (hSessionRO,hObjectSet,&attribs[0],1) );
+	CPPUNIT_ASSERT(rv == CKR_ACTION_PROHIBITED);
 
 	attribs[0].pValue = NULL_PTR;
 	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSessionRO,hObjectSessionPublic,&attribs[0],1) );
@@ -1309,7 +1366,6 @@ void ObjectTests::testSetAttributeValue()
 	CPPUNIT_ASSERT(rv == CKR_OK);
 	CPPUNIT_ASSERT(attribs[0].ulValueLen == strlen(pLabel));
 	CPPUNIT_ASSERT(memcmp(pLabel,pStoredLabel,strlen(pLabel)) == 0);
-
 
 	// Close session
 	rv = CRYPTOKI_F_PTR( C_CloseSession(hSessionRO) );
@@ -1564,7 +1620,7 @@ void ObjectTests::testDefaultDataAttributes()
 
 	// Check attributes in data object
 	checkCommonObjectAttributes(hSession, hObject, objClass);
-	checkCommonStorageObjectAttributes(hSession, hObject, CK_FALSE, CK_FALSE, CK_TRUE, NULL_PTR, 0, CK_TRUE);
+	checkCommonStorageObjectAttributes(hSession, hObject, CK_FALSE, CK_TRUE, CK_TRUE, NULL_PTR, 0, CK_TRUE, CK_TRUE);
 	checkDataObjectAttributes(hSession, hObject, NULL_PTR, 0, NULL_PTR, 0, NULL_PTR, 0);
 }
 
@@ -1609,7 +1665,7 @@ void ObjectTests::testDefaultX509CertAttributes()
 
 	// Check attributes in X509 certificate object
 	checkCommonObjectAttributes(hSession, hObject, objClass);
-	checkCommonStorageObjectAttributes(hSession, hObject, CK_FALSE, CK_FALSE, CK_TRUE, NULL_PTR, 0, CK_TRUE);
+	checkCommonStorageObjectAttributes(hSession, hObject, CK_FALSE, CK_FALSE, CK_TRUE, NULL_PTR, 0, CK_TRUE, CK_TRUE);
 	memset(&emptyDate, 0, sizeof(emptyDate));
 	checkCommonCertificateObjectAttributes(hSession, hObject, CKC_X_509, CK_FALSE, 0, pCheckValue, sizeof(pCheckValue), emptyDate, 0, emptyDate, 0);
 	checkX509CertificateObjectAttributes(hSession, hObject, pSubject, sizeof(pSubject)-1, NULL_PTR, 0, NULL_PTR, 0, NULL_PTR, 0, pValue, sizeof(pValue)-1, NULL_PTR, 0, NULL_PTR, 0, NULL_PTR, 0, 0, CKM_SHA_1);
@@ -1661,7 +1717,7 @@ void ObjectTests::testDefaultRSAPubAttributes()
 
 	// Check attributes in RSA public key object
 	checkCommonObjectAttributes(hSession, hObject, objClass);
-	checkCommonStorageObjectAttributes(hSession, hObject, CK_FALSE, CK_FALSE, CK_TRUE, NULL_PTR, 0, CK_TRUE);
+	checkCommonStorageObjectAttributes(hSession, hObject, CK_FALSE, CK_FALSE, CK_TRUE, NULL_PTR, 0, CK_TRUE, CK_TRUE);
 	memset(&emptyDate, 0, sizeof(emptyDate));
 	checkCommonKeyAttributes(hSession, hObject, objType, NULL_PTR, 0, emptyDate, 0, emptyDate, 0, CK_FALSE, CK_FALSE, CK_UNAVAILABLE_INFORMATION, NULL_PTR, 0);
 	checkCommonPublicKeyAttributes(hSession, hObject, NULL_PTR, 0, CK_TRUE, CK_TRUE, CK_TRUE, CK_TRUE, CK_FALSE, NULL_PTR, 0);
@@ -1725,7 +1781,7 @@ void ObjectTests::testDefaultRSAPrivAttributes()
 
 	// Check attributes in RSA public key object
 	checkCommonObjectAttributes(hSession, hObject, objClass);
-	checkCommonStorageObjectAttributes(hSession, hObject, CK_FALSE, CK_FALSE, CK_TRUE, NULL_PTR, 0, CK_TRUE);
+	checkCommonStorageObjectAttributes(hSession, hObject, CK_FALSE, CK_TRUE, CK_TRUE, NULL_PTR, 0, CK_TRUE, CK_TRUE);
 	memset(&emptyDate, 0, sizeof(emptyDate));
 	checkCommonKeyAttributes(hSession, hObject, objType, NULL_PTR, 0, emptyDate, 0, emptyDate, 0, CK_FALSE, CK_FALSE, CK_UNAVAILABLE_INFORMATION, NULL_PTR, 0);
 	checkCommonPrivateKeyAttributes(hSession, hObject, NULL_PTR, 0, CK_FALSE, CK_TRUE, CK_TRUE, CK_TRUE, CK_TRUE, CK_TRUE, CK_FALSE, CK_FALSE, CK_FALSE, NULL_PTR, 0, CK_FALSE);
@@ -1906,18 +1962,217 @@ void ObjectTests::testGetInvalidAttribute()
 	CPPUNIT_ASSERT(rv == CKR_ATTRIBUTE_TYPE_INVALID);
 }
 
-void ObjectTests::testArrayAttribute()
+void ObjectTests::testReAuthentication()
+{
+	CK_RV rv;
+	CK_SESSION_HANDLE hSession;
+	CK_OBJECT_HANDLE hPuk = CK_INVALID_HANDLE;
+	CK_OBJECT_HANDLE hPrk = CK_INVALID_HANDLE;
+
+	CK_MECHANISM mechanism = { CKM_RSA_PKCS_KEY_PAIR_GEN, NULL_PTR, 0 };
+	CK_ULONG bits = 1024;
+	CK_BBOOL bTrue = CK_TRUE;
+	CK_ATTRIBUTE pukAttribs[] = {
+		{ CKA_MODULUS_BITS, &bits, sizeof(bits) }
+	};
+	CK_ATTRIBUTE prkAttribs[] = {
+		{ CKA_PRIVATE, &bTrue, sizeof(bTrue) },
+		{ CKA_DECRYPT, &bTrue, sizeof(bTrue) },
+		{ CKA_SIGN, &bTrue, sizeof(bTrue) },
+		{ CKA_ALWAYS_AUTHENTICATE, &bTrue, sizeof(bTrue) }
+	};
+
+	CK_MECHANISM signMech = { CKM_SHA256_RSA_PKCS, NULL_PTR, 0 };
+	CK_BYTE data[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F };
+	CK_BYTE signature256[256];
+	CK_ULONG signature256Len = sizeof(signature256);
+
+	CK_MECHANISM encMech = { CKM_RSA_PKCS, NULL_PTR, 0 };
+	CK_BYTE cipherText[256];
+	CK_ULONG ulCipherTextLen = sizeof(cipherText);
+	CK_BYTE recoveredText[256];
+	CK_ULONG ulRecoveredTextLen = sizeof(recoveredText);
+
+	// Just make sure that we finalize any previous tests
+	CRYPTOKI_F_PTR( C_Finalize(NULL_PTR) );
+
+	// Initialize the library and start the test.
+	rv = CRYPTOKI_F_PTR( C_Initialize(NULL_PTR) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// Open read-write session
+	rv = CRYPTOKI_F_PTR( C_OpenSession(m_initializedTokenSlotID, CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL_PTR, NULL_PTR, &hSession) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// Login USER into the sessions so we can create private objects
+	rv = CRYPTOKI_F_PTR( C_Login(hSession,CKU_USER,m_userPin1,m_userPin1Length) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// Create object
+	rv = CRYPTOKI_F_PTR( C_GenerateKeyPair(hSession, &mechanism, pukAttribs, 1, prkAttribs, 4, &hPuk, &hPrk) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// Test C_Sign with re-authentication with invalid and valid PIN
+	rv = CRYPTOKI_F_PTR( C_Login(hSession,CKU_CONTEXT_SPECIFIC,m_userPin1,m_userPin1Length) );
+	CPPUNIT_ASSERT(rv == CKR_OPERATION_NOT_INITIALIZED);
+	rv = CRYPTOKI_F_PTR( C_SignInit(hSession, &signMech, hPrk) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	rv = CRYPTOKI_F_PTR( C_Login(hSession,CKU_CONTEXT_SPECIFIC,m_userPin1,m_userPin1Length-1) );
+	CPPUNIT_ASSERT(rv == CKR_PIN_INCORRECT);
+	rv = CRYPTOKI_F_PTR( C_Login(hSession,CKU_CONTEXT_SPECIFIC,m_userPin1,m_userPin1Length) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	rv = CRYPTOKI_F_PTR( C_Sign(hSession, data, sizeof(data), signature256, &signature256Len) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// Test C_Sign without re-authentication
+	rv = CRYPTOKI_F_PTR( C_SignInit(hSession, &signMech, hPrk) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	rv = CRYPTOKI_F_PTR( C_Sign(hSession, data, sizeof(data), signature256, &signature256Len) );
+	CPPUNIT_ASSERT(rv == CKR_USER_NOT_LOGGED_IN);
+	rv = CRYPTOKI_F_PTR( C_Sign(hSession, data, sizeof(data), signature256, &signature256Len) );
+	CPPUNIT_ASSERT(rv == CKR_OPERATION_NOT_INITIALIZED);
+
+	// Test C_SignUpdate with re-authentication
+	rv = CRYPTOKI_F_PTR( C_SignInit(hSession, &signMech, hPrk) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	rv = CRYPTOKI_F_PTR( C_Login(hSession,CKU_CONTEXT_SPECIFIC,m_userPin1,m_userPin1Length) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	rv = CRYPTOKI_F_PTR( C_SignUpdate(hSession, data, sizeof(data)) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	rv = CRYPTOKI_F_PTR( C_SignFinal(hSession, signature256, &signature256Len) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// Test C_SignUpdate without re-authentication
+	rv = CRYPTOKI_F_PTR( C_SignInit(hSession, &signMech, hPrk) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	rv = CRYPTOKI_F_PTR( C_SignUpdate(hSession, data, sizeof(data)) );
+	CPPUNIT_ASSERT(rv == CKR_USER_NOT_LOGGED_IN);
+	rv = CRYPTOKI_F_PTR( C_SignUpdate(hSession, data, sizeof(data)) );
+	CPPUNIT_ASSERT(rv == CKR_OPERATION_NOT_INITIALIZED);
+
+	// Test C_SignFinal with re-authentication
+	rv = CRYPTOKI_F_PTR( C_SignInit(hSession, &signMech, hPrk) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	rv = CRYPTOKI_F_PTR( C_Login(hSession,CKU_CONTEXT_SPECIFIC,m_userPin1,m_userPin1Length) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	rv = CRYPTOKI_F_PTR( C_SignFinal(hSession, signature256, &signature256Len) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// Test C_SignFinal without re-authentication
+	rv = CRYPTOKI_F_PTR( C_SignInit(hSession, &signMech, hPrk) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	rv = CRYPTOKI_F_PTR( C_SignFinal(hSession, signature256, &signature256Len) );
+	CPPUNIT_ASSERT(rv == CKR_USER_NOT_LOGGED_IN);
+	rv = CRYPTOKI_F_PTR( C_SignFinal(hSession, signature256, &signature256Len) );
+	CPPUNIT_ASSERT(rv == CKR_OPERATION_NOT_INITIALIZED);
+
+	// Encrypt some data
+	rv = CRYPTOKI_F_PTR( C_EncryptInit(hSession,&encMech,hPuk) );
+	CPPUNIT_ASSERT(rv==CKR_OK);
+	rv = CRYPTOKI_F_PTR( C_Encrypt(hSession,data,sizeof(data),cipherText,&ulCipherTextLen) );
+	CPPUNIT_ASSERT(rv==CKR_OK);
+
+	// Test C_Decrypt with re-authentication
+	rv = CRYPTOKI_F_PTR( C_DecryptInit(hSession,&encMech,hPrk) );
+	CPPUNIT_ASSERT(rv==CKR_OK);
+	rv = CRYPTOKI_F_PTR( C_Login(hSession,CKU_CONTEXT_SPECIFIC,m_userPin1,m_userPin1Length) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	rv = CRYPTOKI_F_PTR( C_Decrypt(hSession,cipherText,ulCipherTextLen,recoveredText,&ulRecoveredTextLen) );
+	CPPUNIT_ASSERT(rv==CKR_OK);
+	CPPUNIT_ASSERT(memcmp(data, &recoveredText[ulRecoveredTextLen-sizeof(data)], sizeof(data)) == 0);
+
+	// Test C_Decrypt without re-authentication
+	rv = CRYPTOKI_F_PTR( C_DecryptInit(hSession,&encMech,hPrk) );
+	CPPUNIT_ASSERT(rv==CKR_OK);
+	rv = CRYPTOKI_F_PTR( C_Decrypt(hSession,cipherText,ulCipherTextLen,recoveredText,&ulRecoveredTextLen) );
+	CPPUNIT_ASSERT(rv == CKR_USER_NOT_LOGGED_IN);
+	rv = CRYPTOKI_F_PTR( C_Decrypt(hSession,cipherText,ulCipherTextLen,recoveredText,&ulRecoveredTextLen) );
+	CPPUNIT_ASSERT(rv == CKR_OPERATION_NOT_INITIALIZED);
+}
+
+void ObjectTests::testAllowedMechanisms()
+{
+	CK_RV rv;
+	CK_SESSION_HANDLE hSession;
+
+	// Just make sure that we finalize any previous tests
+	CRYPTOKI_F_PTR( C_Finalize(NULL_PTR) );
+
+	// Initialize the library and start the test.
+	rv = CRYPTOKI_F_PTR( C_Initialize(NULL_PTR) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// Open read-write session
+	rv = CRYPTOKI_F_PTR( C_OpenSession(m_initializedTokenSlotID, CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL_PTR, NULL_PTR, &hSession) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// Login USER into the sessions so we can create a private objects
+	rv = CRYPTOKI_F_PTR( C_Login(hSession,CKU_USER,m_userPin1,m_userPin1Length) );
+	CPPUNIT_ASSERT(rv==CKR_OK);
+
+	CK_KEY_TYPE keyType = CKK_GENERIC_SECRET;
+	CK_OBJECT_CLASS secretClass = CKO_SECRET_KEY;
+	CK_BYTE key[65] = { "0000000000000000000000000000000000000000000000000000000000000000" };
+	CK_MECHANISM_TYPE allowedMechs[] = { CKM_SHA256_HMAC, CKM_SHA512_HMAC };
+	CK_ATTRIBUTE attribs[] = {
+			{ CKA_KEY_TYPE, &keyType, sizeof(keyType) },
+			{ CKA_CLASS, &secretClass, sizeof(secretClass) },
+			{ CKA_VALUE, &key, sizeof(key)-1 },
+			{ CKA_ALLOWED_MECHANISMS, &allowedMechs, sizeof(allowedMechs) }
+	};
+
+	CK_OBJECT_HANDLE hKey = CK_INVALID_HANDLE;
+	rv = CRYPTOKI_F_PTR( C_CreateObject(hSession, attribs, sizeof(attribs)/sizeof(CK_ATTRIBUTE), &hKey) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	CK_BYTE data[] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F };
+
+	// SHA_1_HMAC is not an allowed mechanism
+	CK_MECHANISM mechanism = { CKM_SHA_1_HMAC, NULL_PTR, 0 };
+	rv = CRYPTOKI_F_PTR( C_SignInit(hSession, &mechanism, hKey) );
+	CPPUNIT_ASSERT(rv == CKR_MECHANISM_INVALID);
+
+	// SHA256_HMAC is an allowed mechanism
+	mechanism.mechanism = CKM_SHA256_HMAC;
+	rv = CRYPTOKI_F_PTR( C_SignInit(hSession, &mechanism, hKey) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	CK_BYTE signature256[256];
+	CK_ULONG signature256Len = sizeof(signature256);
+	rv = CRYPTOKI_F_PTR( C_Sign(hSession, data, sizeof(data), signature256, &signature256Len) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	// SHA384_HMAC is not an allowed mechanism
+	mechanism.mechanism = CKM_SHA384_HMAC;
+	rv = CRYPTOKI_F_PTR( C_SignInit(hSession, &mechanism, hKey) );
+	CPPUNIT_ASSERT(rv == CKR_MECHANISM_INVALID);
+
+	// SHA512_HMAC is an allowed mechanism
+	mechanism.mechanism = CKM_SHA512_HMAC;
+	rv = CRYPTOKI_F_PTR( C_SignInit(hSession, &mechanism, hKey) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+	CK_BYTE signature512[512];
+	CK_ULONG signature512Len = sizeof(signature512);
+	rv = CRYPTOKI_F_PTR( C_Sign(hSession, data, sizeof(data), signature512, &signature512Len) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+
+	rv = CRYPTOKI_F_PTR( C_DestroyObject(hSession, hKey) );
+	CPPUNIT_ASSERT(rv == CKR_OK);
+}
+
+void ObjectTests::testTemplateAttribute()
 {
 	CK_RV rv;
 	CK_SESSION_HANDLE hSession;
 	CK_OBJECT_HANDLE hObject = CK_INVALID_HANDLE;
-        CK_BYTE pE[] = { 0x01, 0x00, 0x01 };
+	CK_BYTE pE[] = { 0x01, 0x00, 0x01 };
+	CK_MECHANISM_TYPE allowedMechs[] = { CKM_SHA256_HMAC, CKM_SHA512_HMAC };
 
 	// Wrap template
 	CK_KEY_TYPE wrapType = CKK_SHA256_HMAC;;
 	CK_ATTRIBUTE wrapTemplate[] = {
 		{ CKA_KEY_TYPE, &wrapType, sizeof(wrapType) },
-		{ CKA_PUBLIC_EXPONENT, pE, sizeof(pE) }
+		{ CKA_PUBLIC_EXPONENT, pE, sizeof(pE) },
+		{ CKA_ALLOWED_MECHANISMS, &allowedMechs, sizeof(allowedMechs) }
 	};
 
 	// Minimal public key object
@@ -1959,6 +2214,7 @@ void ObjectTests::testArrayAttribute()
 
 	CK_ATTRIBUTE wrapAttribs[] = {
 		{ 0, NULL_PTR, 0 },
+		{ 0, NULL_PTR, 0 },
 		{ 0, NULL_PTR, 0 }
 	};
 	CK_ATTRIBUTE wrapAttrib = { CKA_WRAP_TEMPLATE, NULL_PTR, 0 };
@@ -1966,48 +2222,58 @@ void ObjectTests::testArrayAttribute()
 	// Get number of elements
 	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hObject, &wrapAttrib, 1) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
-	CPPUNIT_ASSERT(wrapAttrib.ulValueLen == 2 * sizeof(CK_ATTRIBUTE));
+	CPPUNIT_ASSERT(wrapAttrib.ulValueLen == 3 * sizeof(CK_ATTRIBUTE));
 
 	// Get element types and sizes
 	wrapAttrib.pValue = wrapAttribs;
 	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hObject, &wrapAttrib, 1) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
-	CPPUNIT_ASSERT(wrapAttrib.ulValueLen == 2 * sizeof(CK_ATTRIBUTE));
-	if (wrapAttribs[0].type == CKA_KEY_TYPE)
+	CPPUNIT_ASSERT(wrapAttrib.ulValueLen == 3 * sizeof(CK_ATTRIBUTE));
+	for (size_t i = 0; i < 3; i++)
 	{
-		CPPUNIT_ASSERT(wrapAttribs[0].ulValueLen == sizeof(CK_KEY_TYPE));
-		CPPUNIT_ASSERT(wrapAttribs[1].type == CKA_PUBLIC_EXPONENT);
-		CPPUNIT_ASSERT(wrapAttribs[1].ulValueLen == sizeof(pE));
-	}
-	else
-	{
-		CPPUNIT_ASSERT(wrapAttribs[0].type == CKA_PUBLIC_EXPONENT);
-		CPPUNIT_ASSERT(wrapAttribs[0].ulValueLen == sizeof(pE));
-		CPPUNIT_ASSERT(wrapAttribs[1].type == CKA_KEY_TYPE);
-		CPPUNIT_ASSERT(wrapAttribs[1].ulValueLen == sizeof(CK_KEY_TYPE));
+		switch (wrapAttribs[i].type)
+		{
+			case CKA_KEY_TYPE:
+				CPPUNIT_ASSERT(wrapAttribs[i].ulValueLen == sizeof(CK_KEY_TYPE));
+				break;
+			case CKA_PUBLIC_EXPONENT:
+				CPPUNIT_ASSERT(wrapAttribs[i].ulValueLen == sizeof(pE));
+				break;
+			case CKA_ALLOWED_MECHANISMS:
+				CPPUNIT_ASSERT(wrapAttribs[i].ulValueLen == sizeof(allowedMechs));
+				break;
+			default:
+				CPPUNIT_ASSERT(false);
+		}
 	}
 
 	// Get values
 	wrapAttribs[0].pValue = (CK_VOID_PTR)malloc(wrapAttribs[0].ulValueLen);
 	wrapAttribs[1].pValue = (CK_VOID_PTR)malloc(wrapAttribs[1].ulValueLen);
+	wrapAttribs[2].pValue = (CK_VOID_PTR)malloc(wrapAttribs[2].ulValueLen);
 	rv = CRYPTOKI_F_PTR( C_GetAttributeValue(hSession, hObject, &wrapAttrib, 1) );
 	CPPUNIT_ASSERT(rv == CKR_OK);
-	if (wrapAttribs[0].type == CKA_KEY_TYPE)
+	for (size_t i = 0; i < 3; i++)
 	{
-		CK_KEY_TYPE kt = *(CK_KEY_TYPE*) wrapAttribs[0].pValue;
-		CPPUNIT_ASSERT(kt == CKK_SHA256_HMAC);
-		CPPUNIT_ASSERT(memcmp(wrapAttribs[1].pValue, pE, sizeof(pE)) == 0);
-	}
-	else
-	{
-		CPPUNIT_ASSERT(memcmp(wrapAttribs[0].pValue, pE, sizeof(pE)) == 0);
-		CK_KEY_TYPE kt = *(CK_KEY_TYPE*) wrapAttribs[1].pValue;
-		CPPUNIT_ASSERT(kt == CKK_SHA256_HMAC);
-
+		switch (wrapAttribs[i].type)
+		{
+			case CKA_KEY_TYPE:
+				CPPUNIT_ASSERT(*(CK_KEY_TYPE*) wrapAttribs[i].pValue == CKK_SHA256_HMAC);
+				break;
+			case CKA_PUBLIC_EXPONENT:
+				CPPUNIT_ASSERT(memcmp(wrapAttribs[i].pValue, pE, sizeof(pE)) == 0);
+				break;
+			case CKA_ALLOWED_MECHANISMS:
+				CPPUNIT_ASSERT(memcmp(wrapAttribs[i].pValue, allowedMechs, sizeof(allowedMechs)) == 0);
+				break;
+			default:
+				CPPUNIT_ASSERT(false);
+		}
 	}
 
 	free(wrapAttribs[0].pValue);
 	free(wrapAttribs[1].pValue);
+	free(wrapAttribs[2].pValue);
 }
 
 void ObjectTests::testCreateSecretKey()

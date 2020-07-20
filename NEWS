@@ -1,6 +1,177 @@
 NEWS for SoftHSM -- History of user visible changes
 
-SoftHSM 2.3.0 - 2017-xx-xx
+SoftHSM 2.6.1 - 2020-04-29
+
+* Issue #542: Support Ed448/X448 for OpenSSL
+* Issue #538: Improved warning and compilation issues for GCC10
+* Issue #527: Fixed compilation issues for MacOS 10.15.4/Xcode 11.4
+
+SoftHSM 2.6.0 - 2020-03-17
+
+* Issue #493: Upgrade to Botan 2.
+* Issue #530: Update appveyor build.
+* Issue #438: Detect crypto algorithms by default.
+  (Patch from Alon Bar-Lev)
+* Issue #455: Provide a new configuration option to allow enabling and
+  disabling various mechanisms (slots.mechanisms in the softhsm2.conf).
+  (Thanks to Jakub Jelen)
+* Issue #479: Increase SQLite busy timeout from 15 seconds to 3 minutes.
+  (Patch from Jan Luebbe)
+* Issue #513: Add configuration option to reset state on fork closing all
+  sessions rather than keeping all sessions open in duplicate process.
+  (Thanks to Anderson Toshiyuki Sasaki)
+* Issue #500: C_WaitForSlotEvent implementation.
+  (Patch from massey101)
+* Issue #445: Add wrap support with CKM_AES_CBC.
+
+Bugfixes:
+* Issue #418: Set fields to NULL to avoid double free.
+  (Patch from Brian J Murray)
+* Issue #423: ENGINE_load_rdrand is not supported with older openssl.
+  (Patch from Alon Bar-Lev)
+* Issue #429: Updated prerequisite to build from repository.
+  (Patch from Dharmesh Khandelwal)
+* Issue #434: Fix build issues with CMake.
+  (Patch from Peter Wu)
+* Issue #435: Fix botan build without EDDSA.
+  (Patch from Peter Wu)
+* Issue #442: Release resources from OSSLEVPSymmetricAlgorithm.
+  (Patch from Petr Menšík)
+* Issue #449/#502: Do not copy zero sized buffer avoid null pointer reference.
+  (Patch from space88man)
+* Issue #464: Race condition with multiple threads closing last session and
+  opening a newer sessions.
+  (Patch from Takarth)
+* Issue #452: Fixes to automake build fir undefined macros.
+* Issue #462: User PIN count wrongly calculated.
+  (Patch from Ondřej Hlavatý)
+* Issue #516: Fix memory leak in OSSLCryptoFactory.
+  (Patch from Anderson Sasaki)
+* Issue #494: Allow null pointers as arguments when count is zero.
+  (Patch from Yunjong Jeong)
+* Issue #518: Sporadic problem in closing sessions because of lookup of
+  object without prior locking.
+* Issue #506: Check key type for C_EncryptInit and C_DecryptInit.
+  (Patch from Yunjong Jeong)
+* Issue #526: Adjust EDDSA code to return valid EC_PARAMS.
+  (Patch from Jakub Jelen)
+* Issue #452: Autogen failure on undefined macro AC_MSG_ERROR.
+* Issue #527: Fixed some build errors for GCC 10.
+* Issue #470: Null pointer arguments validation for C_EncryptFinal, etc.
+
+
+SoftHSM 2.5.0 - 2018-09-24
+
+* Issue #323: Support for EDDSA with vendor defined mechanisms.
+  (Patch from Francis Dupont)
+* Issue #362: CMake Build System Support for SoftHSM.
+  (Patch from Constantine Grantcharov)
+* Issue #368: Support migrating 32-bit SoftHSMv1 DB on 64-bit system (LP64).
+* Issue #385: Default is not to build EDDSA since it has not been released in
+  OpenSSL.
+* Issue #387: Windows: Add VS2017 detection to Configure.py.
+  (Patch from Jaroslav Imrich)
+* Issue #412: Replace PKCS11 headers with a version from p11-kit.
+  (Patch from Alexander Bokovoy)
+
+Bugfixes:
+* Issue #366: Support cross-compilation.
+  (Patch from Michael Weiser)
+* Issue #377: Duplicate symbol error with custom p11test.
+* Issue #386: Use RDRAND in OpenSSL if that engine is available.
+* Issue #388: Update DBTests.cpp to fix x86 test failure.
+  (Patch from tcely)
+* Issue #393: Not setting CKA_PUBLIC_KEY_INFO correctly.
+  (Patch from pkalapat)
+* Issue #401: Wrong key and keyserver mentioned in installation documentation.
+  (Patch from Berry A.W. van Halderen)
+* Issue #408: Remove mutex callbacks after C_Finalize().
+  (Patch from Alexander Bokovoy)
+
+
+SoftHSM 2.4.0 - 2018-02-27
+
+* Issue #135: Support PKCS#8 for GOST.
+* Issue #140: Support for CKA_ALLOWED_MECHANISMS.
+  (Patch from Brad Hess)
+* Issue #141: Support CKA_ALWAYS_AUTHENTICATE for private key objects.
+* Issue #220: Support for CKM_DES3_CMAC and CKM_AES_CMAC.
+* Issue #226: Configuration option for Windows build to enable build with
+  static CRT (/MT).
+* Issue #325: Support for CKM_AES_GCM.
+* Issue #334: Document that initialized tokens will be reassigned to another
+  slot (based on the token serial number).
+* Issue #335: Support for CKM_RSA_PKCS_PSS.
+  (Patch from Nikos Mavrogiannopoulos)
+* Issue #341: Import AES keys with softhsm2-util.
+  (Patch from Pavel Cherezov)
+* Issue #348: Document that OSX needs pkg-config to detect cppunit.
+* Issue #349: softhsm2-util will check the configuration and report any
+  issues before loading the PKCS#11 library.
+
+Bugfixes:
+* Issue #345: Private objects are presented to security officer in search
+  results.
+* Issue #358: Race condition when multiple applications are creating and
+  reading object files.
+
+
+SoftHSM 2.3.0 - 2017-07-03
+
+* Issue #130: Upgraded to PKCS#11 v2.40.
+  * Minor changes to some return values.
+  * Added CKA_DESTROYABLE to all objects. Used by C_DestroyObject().
+  * Added CKA_PUBLIC_KEY_INFO to certificates, private, and public key
+    objects. Will be accepted from application, but SoftHSM will
+    currently not calculate it.
+* Issue #142: Support for CKM_AES_CTR.
+* Issue #155: Add unit tests for SessionManager.
+* Issue #189: C_DigestKey returns CKR_KEY_INDIGESTIBLE when key
+  attribute CKA_EXTRACTABLE = false. Whitelist SHA algorithms to allow
+  C_DigestKey in this case.
+* Issue #225: Show slot id after initialization.
+* Issue #247: Run AppVeyor (Windows CI) for each PR and merge.
+* Issue #257: Set CKA_DECRYPT/CKA_ENCRYPT flags on key import to true.
+  (Patch from Martin Domke)
+* Issue #261: Add support for libeaycompat lib for FIPS on Windows.
+  (Patch from Matt Hauck)
+* Issue #262: Support importing ECDSA P-521 in softhsm-util.
+* Issue #276: Support for Botan 2.0.
+* Issue #279: Editorial changes from Mountain Lion to Sierra.
+  (Patch from Mike Neumann)
+* Issue #283: More detailed error messages when initializing SoftHSM.
+* Issue #285: Support for LibreSSL.
+  (Patch from Alon Bar-Lev)
+* Issue #286: Update .gitignore.
+  (Patch from Alon Bar-Lev)
+* Issue #291: Change to enable builds and reports on new Jenkinks
+  environment.
+* Issue #293: Detect cppunit in autoconf.
+  (Patch from Alon Bar-Lev)
+* Issue #309: CKO_CERTIFICATE and CKO_PUBLIC_KEY now defaults to
+  CKA_PRIVATE=false.
+* Issue #314: Update README with information about logging.
+* Issue #330: Adjust log levels for failing to enumerate object store.
+  (Patch from Nikos Mavrogiannopoulos)
+
+Bugfixes:
+* Issue #216: Better handling of CRYPTO_set_locking_callback() for OpenSSL.
+* Issue #265: Fix deriving shared secret with ECC.
+* Issue #280: HMAC with sizes less than L bytes is strongly discouraged.
+  Set a lower bound equal to L bytes in ulMinKeySize and check it when
+  initializing the operation.
+* Issue #281: Fix test of p11 shared library.
+  (Patch from Lars Silvén)
+* Issue #289: Minor fix of 'EVP_CipherFinal_ex'.
+  (Patch from Viktor Tarasov)
+* Issue #297: Fix build with cppunit.
+  (Patch from Ludovic Rousseau)
+* Issue #302: Export PKCS#11 symbols from the library.
+  (Patch from Ludovic Rousseau)
+* Issue #305: Zero pad key to fit the block in CKM_AES_KEY_WRAP.
+* Issue #313: Detecting CppUnit when using Macports.
+  (Patch from mouse07410)
+
 
 SoftHSM 2.2.0 - 2016-12-05
 

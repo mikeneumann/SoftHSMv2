@@ -56,7 +56,7 @@ ObjectStore::ObjectStore(std::string inStorePath)
 
 	if (!storeDir.isValid())
 	{
-		ERROR_MSG("Failed to enumerate object store in %s", storePath.c_str());
+		WARNING_MSG("Failed to enumerate object store in %s", storePath.c_str());
 
 		return;
 	}
@@ -75,6 +75,7 @@ ObjectStore::ObjectStore(std::string inStorePath)
 
 			delete token;
 
+			// Silently ignore tokens that we do not have access to
 			continue;
 		}
 

@@ -594,6 +594,506 @@ void AESTests::testECB()
 	}
 }
 
+void AESTests::testCTR()
+{
+	// Test vectors from RFC3686
+
+	char testKeys128[][33] =
+	{
+		"AE6852F8121067CC4BF7A5765577F39E",
+		"7E24067817FAE0D743D6CE1F32539163",
+		"7691BE035E5020A8AC6E618529F9A0DC"
+	};
+
+	char testKeys192[][49] =
+	{
+		"16AF5B145FC9F579C175F93E3BFB0EED863D06CCFDB78515",
+		"7C5CB2401B3DC33C19E7340819E0F69C678C3DB8E6F6A91A",
+		"02BF391EE8ECB159B959617B0965279BF59B60A786D3E0FE"
+	};
+
+	char testKeys256[][65] =
+	{
+		"776BEFF2851DB06F4C8A0542C8696F6C6A81AF1EEC96B4D37FC1D689E6C1C104",
+		"F6D66D6BD52D59BB0796365879EFF886C66DD51A5B6A99744B50590C87A23884",
+		"FF7A617CE69148E4F1726E2F43581DE2AA62D9F805532EDFF1EED687FB54153D"
+	};
+
+	char testData[][256] =
+	{
+		"53696E676C6520626C6F636B206D7367",
+		"000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F",
+		"000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F20212223"
+	};
+
+	char testResult[3][3][256] =
+	{
+		{
+			"E4095D4FB7A7B3792D6175A3261311B8",
+			"4B55384FE259C9C84E7935A003CBE928",
+			"145AD01DBF824EC7560863DC71E3E0C0"
+		},
+		{
+			"5104A106168A72D9790D41EE8EDAD388EB2E1EFC46DA57C8FCE630DF9141BE28",
+			"453243FC609B23327EDFAAFA7131CD9F8490701C5AD4A79CFC1FE0FF42F4FB00",
+			"F05E231B3894612C49EE000B804EB2A9B8306B508F839D6A5530831D9344AF1C"
+		},
+		{
+			"C1CF48A89F2FFDD9CF4652E9EFDB72D74540A42BDE6D7836D59A5CEAAEF3105325B2072F",
+			"96893FC55E5C722F540B7DD1DDF7E758D288BC95C69165884536C811662F2188ABEE0935",
+			"EB6C52821D0BBBF7CE7594462ACA4FAAB407DF866569FD07F48CC0B583D6071F1EC0E6B8"
+		}
+	};
+
+	char testCB[3][3][33] =
+	{
+		{
+			"00000030000000000000000000000001",
+			"0000004836733C147D6D93CB00000001",
+			"00000060DB5672C97AA8F0B200000001"
+		},
+		{
+			"006CB6DBC0543B59DA48D90B00000001",
+			"0096B03B020C6EADC2CB500D00000001",
+			"00FAAC24C1585EF15A43D87500000001"
+		},
+		{
+			"00E0017B27777F3F4A1786F000000001",
+			"0007BDFD5CBD60278DCC091200000001",
+			"001CC5B751A51D70A1C1114800000001"
+		}
+	};
+
+	for (int i = 0; i < 3; i++)
+	{
+		ByteString keyData128(testKeys128[i]);
+		ByteString keyData192(testKeys192[i]);
+		ByteString keyData256(testKeys256[i]);
+
+		AESKey aesKey128(128);
+		CPPUNIT_ASSERT(aesKey128.setKeyBits(keyData128));
+		AESKey aesKey192(192);
+		CPPUNIT_ASSERT(aesKey192.setKeyBits(keyData192));
+		AESKey aesKey256(256);
+		CPPUNIT_ASSERT(aesKey256.setKeyBits(keyData256));
+
+
+		ByteString plainText(testData[i]), shsmPlainText;
+		ByteString CB;
+		ByteString cipherText;
+		ByteString shsmCipherText, OB;
+
+		// Test 128-bit key
+		CB = ByteString(testCB[i][0]);
+		cipherText = ByteString(testResult[i][0]);
+
+		// Now, do the same thing using our AES implementation
+		shsmCipherText.wipe();
+		CPPUNIT_ASSERT(aes->encryptInit(&aesKey128, SymMode::CTR, CB));
+
+		CPPUNIT_ASSERT(aes->encryptUpdate(plainText, OB));
+		shsmCipherText += OB;
+
+		CPPUNIT_ASSERT(aes->encryptFinal(OB));
+		shsmCipherText += OB;
+
+		CPPUNIT_ASSERT(shsmCipherText == cipherText);
+
+		// Check that we can get the plain text
+		shsmPlainText.wipe();
+		CPPUNIT_ASSERT(aes->decryptInit(&aesKey128, SymMode::CTR, CB));
+
+		CPPUNIT_ASSERT(aes->decryptUpdate(shsmCipherText, OB));
+		shsmPlainText += OB;
+
+		CPPUNIT_ASSERT(aes->decryptFinal(OB));
+		shsmPlainText += OB;
+
+		CPPUNIT_ASSERT(shsmPlainText == plainText);
+
+		// Test 192-bit key
+		CB = ByteString(testCB[i][1]);
+		cipherText = ByteString(testResult[i][1]);
+
+		// Now, do the same thing using our AES implementation
+		shsmCipherText.wipe();
+		CPPUNIT_ASSERT(aes->encryptInit(&aesKey192, SymMode::CTR, CB));
+
+		CPPUNIT_ASSERT(aes->encryptUpdate(plainText, OB));
+		shsmCipherText += OB;
+
+		CPPUNIT_ASSERT(aes->encryptFinal(OB));
+		shsmCipherText += OB;
+
+		CPPUNIT_ASSERT(shsmCipherText == cipherText);
+
+		// Check that we can get the plain text
+		shsmPlainText.wipe();
+		CPPUNIT_ASSERT(aes->decryptInit(&aesKey192, SymMode::CTR, CB));
+
+		CPPUNIT_ASSERT(aes->decryptUpdate(shsmCipherText, OB));
+		shsmPlainText += OB;
+
+		CPPUNIT_ASSERT(aes->decryptFinal(OB));
+		shsmPlainText += OB;
+
+		CPPUNIT_ASSERT(shsmPlainText == plainText);
+
+		// Test 256-bit key
+		CB = ByteString(testCB[i][2]);
+		cipherText = ByteString(testResult[i][2]);
+
+		// Now, do the same thing using our AES implementation
+		shsmCipherText.wipe();
+		CPPUNIT_ASSERT(aes->encryptInit(&aesKey256, SymMode::CTR, CB));
+
+		CPPUNIT_ASSERT(aes->encryptUpdate(plainText, OB));
+		shsmCipherText += OB;
+
+		CPPUNIT_ASSERT(aes->encryptFinal(OB));
+		shsmCipherText += OB;
+
+		CPPUNIT_ASSERT(shsmCipherText == cipherText);
+
+		// Check that we can get the plain text
+		shsmPlainText.wipe();
+		CPPUNIT_ASSERT(aes->decryptInit(&aesKey256, SymMode::CTR, CB));
+
+		CPPUNIT_ASSERT(aes->decryptUpdate(shsmCipherText, OB));
+		shsmPlainText += OB;
+
+		CPPUNIT_ASSERT(aes->decryptFinal(OB));
+		shsmPlainText += OB;
+
+		CPPUNIT_ASSERT(shsmPlainText == plainText);
+	}
+}
+
+void AESTests::testGCM()
+{
+	// Test vectors from NIST via Botan
+
+	char test128[8][6][256] =
+	{
+		{
+			"00000000000000000000000000000000",
+			"000000000000000000000000",
+			"",
+			"",
+			"10",
+			"58E2FCCEFA7E3061367F1D57A4E7455A"
+		},
+		{
+			"00000000000000000000000000000000",
+			"000000000000000000000000",
+			"00000000000000000000000000000000",
+			"",
+			"10",
+			"0388DACE60B6A392F328C2B971B2FE78AB6E47D42CEC13BDF53A67B21257BDDF"
+		},
+		{
+			"FEFFE9928665731C6D6A8F9467308308",
+			"CAFEBABEFACEDBADDECAF888",
+			"D9313225F88406E5A55909C5AFF5269A86A7A9531534F7DA2E4C303D8A318A721C3C0C95956809532FCF0E2449A6B525B16AEDF5AA0DE657BA637B391AAFD255",
+			"",
+			"10",
+			"42831EC2217774244B7221B784D0D49CE3AA212F2C02A4E035C17E2329ACA12E21D514B25466931C7D8F6A5AAC84AA051BA30B396A0AAC973D58E091473F59854D5C2AF327CD64A62CF35ABD2BA6FAB4"
+		},
+		{
+			"FEFFE9928665731C6D6A8F9467308308",
+			"CAFEBABEFACEDBADDECAF888",
+			"D9313225F88406E5A55909C5AFF5269A86A7A9531534F7DA2E4C303D8A318A721C3C0C95956809532FCF0E2449A6B525B16AEDF5AA0DE657BA637B39",
+			"FEEDFACEDEADBEEFFEEDFACEDEADBEEFABADDAD2",
+			"10",
+			"42831EC2217774244B7221B784D0D49CE3AA212F2C02A4E035C17E2329ACA12E21D514B25466931C7D8F6A5AAC84AA051BA30B396A0AAC973D58E0915BC94FBC3221A5DB94FAE95AE7121A47"
+		},
+		{
+			"FEFFE9928665731C6D6A8F9467308308",
+			"CAFEBABEFACEDBAD",
+			"D9313225F88406E5A55909C5AFF5269A86A7A9531534F7DA2E4C303D8A318A721C3C0C95956809532FCF0E2449A6B525B16AEDF5AA0DE657BA637B39",
+			"FEEDFACEDEADBEEFFEEDFACEDEADBEEFABADDAD2",
+			"10",
+			"61353B4C2806934A777FF51FA22A4755699B2A714FCDC6F83766E5F97B6C742373806900E49F24B22B097544D4896B424989B5E1EBAC0F07C23F45983612D2E79E3B0785561BE14AACA2FCCB"
+		},
+		{
+			"FEFFE9928665731C6D6A8F9467308308",
+			"9313225DF88406E555909C5AFF5269AA6A7A9538534F7DA1E4C303D2A318A728C3C0C95156809539FCF0E2429A6B525416AEDBF5A0DE6A57A637B39B",
+			"D9313225F88406E5A55909C5AFF5269A86A7A9531534F7DA2E4C303D8A318A721C3C0C95956809532FCF0E2449A6B525B16AEDF5AA0DE657BA637B39",
+			"FEEDFACEDEADBEEFFEEDFACEDEADBEEFABADDAD2",
+			"10",
+			"8CE24998625615B603A033ACA13FB894BE9112A5C3A211A8BA262A3CCA7E2CA701E4A9A4FBA43C90CCDCB281D48C7C6FD62875D2ACA417034C34AEE5619CC5AEFFFE0BFA462AF43C1699D050"
+		},
+		{
+			"FEFFE9928665731C6D6A8F9467308308",
+			"CAFEBABEFACEDBAD",
+			"D9313225F88406E5A55909C5AFF5269A86A7A9531534F7DA2E4C303D8A318A721C3C0C95956809532FCF0E2449A6B525B16AEDF5AA0DE657BA637B39",
+			"FEEDFACEDEADBEEFFEEDFACEDEADBEEFABADDAD2",
+			"C",
+			"61353B4C2806934A777FF51FA22A4755699B2A714FCDC6F83766E5F97B6C742373806900E49F24B22B097544D4896B424989B5E1EBAC0F07C23F45983612D2E79E3B0785561BE14A"
+		},
+		{
+			"FEFFE9928665731C6D6A8F9467308308",
+			"9313225DF88406E555909C5AFF5269AA6A7A9538534F7DA1E4C303D2A318A728C3C0C95156809539FCF0E2429A6B525416AEDBF5A0DE6A57A637B39B",
+			"D9313225F88406E5A55909C5AFF5269A86A7A9531534F7DA2E4C303D8A318A721C3C0C95956809532FCF0E2449A6B525B16AEDF5AA0DE657BA637B39",
+			"FEEDFACEDEADBEEFFEEDFACEDEADBEEFABADDAD2",
+			"C",
+			"8CE24998625615B603A033ACA13FB894BE9112A5C3A211A8BA262A3CCA7E2CA701E4A9A4FBA43C90CCDCB281D48C7C6FD62875D2ACA417034C34AEE5619CC5AEFFFE0BFA462AF43C"
+		}
+	};
+
+	char test192[8][6][256] =
+	{
+		{
+			"000000000000000000000000000000000000000000000000",
+			"000000000000000000000000",
+			"",
+			"",
+			"10",
+			"cd33b28ac773f74ba00ed1f312572435"
+		},
+		{
+			"000000000000000000000000000000000000000000000000",
+			"000000000000000000000000",
+			"00000000000000000000000000000000",
+			"",
+			"10",
+			"98e7247c07f0fe411c267e4384b0f6002ff58d80033927ab8ef4d4587514f0fb"
+		},
+		{
+			"feffe9928665731c6d6a8f9467308308feffe9928665731c",
+			"cafebabefacedbaddecaf888",
+			"d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b391aafd255",
+			"",
+			"10",
+			"3980ca0b3c00e841eb06fac4872a2757859e1ceaa6efd984628593b40ca1e19c7d773d00c144c525ac619d18c84a3f4718e2448b2fe324d9ccda2710acade2569924a7c8587336bfb118024db8674a14"
+		},
+		{
+			"feffe9928665731c6d6a8f9467308308feffe9928665731c",
+			"cafebabefacedbaddecaf888",
+			"d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39",
+			"feedfacedeadbeeffeedfacedeadbeefabaddad2",
+			"10",
+			"3980ca0b3c00e841eb06fac4872a2757859e1ceaa6efd984628593b40ca1e19c7d773d00c144c525ac619d18c84a3f4718e2448b2fe324d9ccda27102519498e80f1478f37ba55bd6d27618c"
+		},
+		{
+			"feffe9928665731c6d6a8f9467308308feffe9928665731c",
+			"cafebabefacedbad",
+			"d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39",
+			"feedfacedeadbeeffeedfacedeadbeefabaddad2",
+			"10",
+			"0f10f599ae14a154ed24b36e25324db8c566632ef2bbb34f8347280fc4507057fddc29df9a471f75c66541d4d4dad1c9e93a19a58e8b473fa0f062f765dcc57fcf623a24094fcca40d3533f8"
+		},
+		{
+			"feffe9928665731c6d6a8f9467308308feffe9928665731c",
+			"9313225df88406e555909c5aff5269aa6a7a9538534f7da1e4c303d2a318a728c3c0c95156809539fcf0e2429a6b525416aedbf5a0de6a57a637b39b",
+			"d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39",
+			"feedfacedeadbeeffeedfacedeadbeefabaddad2",
+			"10",
+			"d27e88681ce3243c4830165a8fdcf9ff1de9a1d8e6b447ef6ef7b79828666e4581e79012af34ddd9e2f037589b292db3e67c036745fa22e7e9b7373bdcf566ff291c25bbb8568fc3d376a6d9"
+		},
+		{
+			"feffe9928665731c6d6a8f9467308308feffe9928665731c",
+			"cafebabefacedbaddecaf888",
+			"d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39",
+			"feedfacedeadbeeffeedfacedeadbeefabaddad2",
+			"C",
+			"3980ca0b3c00e841eb06fac4872a2757859e1ceaa6efd984628593b40ca1e19c7d773d00c144c525ac619d18c84a3f4718e2448b2fe324d9ccda27102519498e80f1478f37ba55bd"
+		},
+		{
+			"feffe9928665731c6d6a8f9467308308feffe9928665731c",
+			"cafebabefacedbad",
+			"d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39",
+			"feedfacedeadbeeffeedfacedeadbeefabaddad2",
+			"C",
+			"0f10f599ae14a154ed24b36e25324db8c566632ef2bbb34f8347280fc4507057fddc29df9a471f75c66541d4d4dad1c9e93a19a58e8b473fa0f062f765dcc57fcf623a24094fcca4"
+		}
+	};
+
+	char test256[8][6][256] =
+	{
+		{
+			"0000000000000000000000000000000000000000000000000000000000000000",
+			"000000000000000000000000",
+			"",
+			"",
+			"10",
+			"530f8afbc74536b9a963b4f1c4cb738b"
+		},
+		{
+			"0000000000000000000000000000000000000000000000000000000000000000",
+			"000000000000000000000000",
+			"00000000000000000000000000000000",
+			"",
+			"10",
+			"cea7403d4d606b6e074ec5d3baf39d18d0d1c8a799996bf0265b98b5d48ab919"
+		},
+		{
+			"feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308",
+			"cafebabefacedbaddecaf888",
+			"d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b391aafd255",
+			"",
+			"10",
+			"522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f662898015adb094dac5d93471bdec1a502270e3cc6c"
+		},
+		{
+			"feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308",
+			"cafebabefacedbaddecaf888",
+			"d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39",
+			"feedfacedeadbeeffeedfacedeadbeefabaddad2",
+			"10",
+			"522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f66276fc6ece0f4e1768cddf8853bb2d551b"
+		},
+		{
+			"feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308",
+			"cafebabefacedbad",
+			"d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39",
+			"feedfacedeadbeeffeedfacedeadbeefabaddad2",
+			"10",
+			"c3762df1ca787d32ae47c13bf19844cbaf1ae14d0b976afac52ff7d79bba9de0feb582d33934a4f0954cc2363bc73f7862ac430e64abe499f47c9b1f3a337dbf46a792c45e454913fe2ea8f2",
+		},
+		{
+			"feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308",
+			"9313225df88406e555909c5aff5269aa6a7a9538534f7da1e4c303d2a318a728c3c0c95156809539fcf0e2429a6b525416aedbf5a0de6a57a637b39b",
+			"d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39",
+			"feedfacedeadbeeffeedfacedeadbeefabaddad2",
+			"10",
+			"5a8def2f0c9e53f1f75d7853659e2a20eeb2b22aafde6419a058ab4f6f746bf40fc0c3b780f244452da3ebf1c5d82cdea2418997200ef82e44ae7e3fa44a8266ee1c8eb0c8b5d4cf5ae9f19a"
+		},
+		{
+			"feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308",
+			"cafebabefacedbaddecaf888",
+			"d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39",
+			"feedfacedeadbeeffeedfacedeadbeefabaddad2",
+			"C",
+			"522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f66276fc6ece0f4e1768cddf8853"
+		},
+		{
+			"feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308",
+			"cafebabefacedbad",
+			"d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39",
+			"feedfacedeadbeeffeedfacedeadbeefabaddad2",
+			"C",
+			"c3762df1ca787d32ae47c13bf19844cbaf1ae14d0b976afac52ff7d79bba9de0feb582d33934a4f0954cc2363bc73f7862ac430e64abe499f47c9b1f3a337dbf46a792c45e454913"
+		}
+	};
+
+	for (int i = 0; i < 8; i++)
+	{
+		ByteString keyData128(test128[i][0]);
+		ByteString keyData192(test192[i][0]);
+		ByteString keyData256(test256[i][0]);
+
+		AESKey aesKey128(128);
+		CPPUNIT_ASSERT(aesKey128.setKeyBits(keyData128));
+		AESKey aesKey192(192);
+		CPPUNIT_ASSERT(aesKey192.setKeyBits(keyData192));
+		AESKey aesKey256(256);
+		CPPUNIT_ASSERT(aesKey256.setKeyBits(keyData256));
+
+		ByteString IV;
+		ByteString plainText;
+		ByteString AAD;
+		size_t tagBits;
+		ByteString cipherText;
+
+		ByteString shsmPlainText;
+		ByteString shsmCipherText;
+		ByteString OB;
+
+		// Test 128-bit key
+		IV = ByteString(test128[i][1]);
+		plainText = ByteString(test128[i][2]);
+		AAD = ByteString(test128[i][3]);
+		tagBits = ByteString(test128[i][4]).long_val();
+		cipherText = ByteString(test128[i][5]);
+
+		// Now, do the same thing using our AES implementation
+		shsmCipherText.wipe();
+		CPPUNIT_ASSERT(aes->encryptInit(&aesKey128, SymMode::GCM, IV, true, 0, AAD, tagBits));
+
+		CPPUNIT_ASSERT(aes->encryptUpdate(plainText, OB));
+		shsmCipherText += OB;
+
+		CPPUNIT_ASSERT(aes->encryptFinal(OB));
+		shsmCipherText += OB;
+
+		CPPUNIT_ASSERT(shsmCipherText == cipherText);
+
+		// Check that we can get the plain text
+		shsmPlainText.wipe();
+		CPPUNIT_ASSERT(aes->decryptInit(&aesKey128, SymMode::GCM, IV, true, 0, AAD, tagBits));
+
+		CPPUNIT_ASSERT(aes->decryptUpdate(shsmCipherText, OB));
+		CPPUNIT_ASSERT(OB.size() == 0);
+
+		CPPUNIT_ASSERT(aes->decryptFinal(OB));
+		shsmPlainText += OB;
+
+		CPPUNIT_ASSERT(shsmPlainText == plainText);
+
+		// Test 192-bit key
+		IV = ByteString(test192[i][1]);
+		plainText = ByteString(test192[i][2]);
+		AAD = ByteString(test192[i][3]);
+		tagBits = ByteString(test192[i][4]).long_val();
+		cipherText = ByteString(test192[i][5]);
+
+		// Now, do the same thing using our AES implementation
+		shsmCipherText.wipe();
+		CPPUNIT_ASSERT(aes->encryptInit(&aesKey192, SymMode::GCM, IV, true, 0, AAD, tagBits));
+
+		CPPUNIT_ASSERT(aes->encryptUpdate(plainText, OB));
+		shsmCipherText += OB;
+
+		CPPUNIT_ASSERT(aes->encryptFinal(OB));
+		shsmCipherText += OB;
+		CPPUNIT_ASSERT(shsmCipherText == cipherText);
+
+		// Check that we can get the plain text
+		shsmPlainText.wipe();
+		CPPUNIT_ASSERT(aes->decryptInit(&aesKey192, SymMode::GCM, IV, true, 0, AAD, tagBits));
+
+		CPPUNIT_ASSERT(aes->decryptUpdate(shsmCipherText, OB));
+		CPPUNIT_ASSERT(OB.size() == 0);
+
+		CPPUNIT_ASSERT(aes->decryptFinal(OB));
+		shsmPlainText += OB;
+
+		CPPUNIT_ASSERT(shsmPlainText == plainText);
+
+		// Test 256-bit key
+		IV = ByteString(test256[i][1]);
+		plainText = ByteString(test256[i][2]);
+		AAD = ByteString(test256[i][3]);
+		tagBits = ByteString(test256[i][4]).long_val();
+		cipherText = ByteString(test256[i][5]);
+
+		// Now, do the same thing using our AES implementation
+		shsmCipherText.wipe();
+		CPPUNIT_ASSERT(aes->encryptInit(&aesKey256, SymMode::GCM, IV, true, 0, AAD, tagBits));
+
+		CPPUNIT_ASSERT(aes->encryptUpdate(plainText, OB));
+		shsmCipherText += OB;
+
+		CPPUNIT_ASSERT(aes->encryptFinal(OB));
+		shsmCipherText += OB;
+
+		CPPUNIT_ASSERT(shsmCipherText == cipherText);
+
+		// Check that we can get the plain text
+		shsmPlainText.wipe();
+		CPPUNIT_ASSERT(aes->decryptInit(&aesKey256, SymMode::GCM, IV, true, 0, AAD, tagBits));
+
+		CPPUNIT_ASSERT(aes->decryptUpdate(shsmCipherText, OB));
+		CPPUNIT_ASSERT(OB.size() == 0);
+
+		CPPUNIT_ASSERT(aes->decryptFinal(OB));
+		shsmPlainText += OB;
+
+		CPPUNIT_ASSERT(shsmPlainText == plainText);
+	}
+}
+
 void AESTests::testWrap(const char testKeK[][128], const char testKey[][128], const char testCt[][128], const int testCnt, SymWrap::Type mode)
 {
 	for (int i = 0; i < testCnt; i++)

@@ -1,12 +1,12 @@
 MAINTAINERCLEANFILES =	$(srcdir)/Makefile.in
 
-AM_CPPFLAGS = 		-I$(srcdir)/../../lib/cryptoki_compat \
-			-I$(srcdir)/../common \
+AM_CPPFLAGS =		-I$(srcdir)/../common \
 			-I$(srcdir)/../../lib/ \
 			-I$(srcdir)/../../lib/common \
 			-I$(srcdir)/../../lib/crypto \
 			-I$(srcdir)/../../lib/data_mgr \
 			-I$(srcdir)/../../lib/object_store \
+			-I$(srcdir)/../../lib/pkcs11 \
 			@CRYPTO_INCLUDES@ \
 			@SQLITE3_INCLUDES@
 
@@ -36,5 +36,6 @@ if WITH_BOTAN
 softhsm2_util_SOURCES +=	softhsm2-util-botan.cpp
 endif
 
-EXTRA_DIST =		$(srcdir)/*.h \
+EXTRA_DIST =		$(srcdir)/CMakeLists.txt \
+			$(srcdir)/*.h \
 			$(srcdir)/*.cpp

@@ -36,7 +36,7 @@
 #include "config.h"
 #include <openssl/opensslv.h>
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
 
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
@@ -80,6 +80,11 @@ int DSA_SIG_set0(DSA_SIG *sig, BIGNUM *r, BIGNUM *s);
 #ifdef WITH_ECC
 void ECDSA_SIG_get0(const ECDSA_SIG *sig, const BIGNUM **pr, const BIGNUM **ps);
 int ECDSA_SIG_set0(ECDSA_SIG *sig, BIGNUM *r, BIGNUM *s);
+#endif
+
+// EDDSA
+#ifdef WITH_EDDSA
+#error This OpenSSL version is incompatible with EDDSA
 #endif
 
 // RSA routines

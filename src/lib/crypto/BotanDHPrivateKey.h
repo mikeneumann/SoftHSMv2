@@ -36,28 +36,19 @@
 #include "config.h"
 #include "DHPrivateKey.h"
 #include <botan/dh.h>
+#include <botan/version.h>
 
 // Derived from the DH_PrivateKey class
 class BotanDH_PrivateKey : public Botan::DH_PublicKey,
 			   public virtual Botan::DL_Scheme_PrivateKey
 {
 public:
-#if BOTAN_VERSION_MINOR == 11
-	std::vector<Botan::byte> public_value() const;
-#else
-	Botan::MemoryVector<Botan::byte> public_value() const;
-#endif
+	std::vector<uint8_t> public_value() const;
 
 	// Constructors
-#if BOTAN_VERSION_MINOR == 11
 	BotanDH_PrivateKey(const Botan::AlgorithmIdentifier& alg_id,
-			   const Botan::secure_vector<Botan::byte>& key_bits,
+			   const Botan::secure_vector<uint8_t>& key_bits,
 			   Botan::RandomNumberGenerator& rng);
-#else
-	BotanDH_PrivateKey(const Botan::AlgorithmIdentifier& alg_id,
-			   const Botan::MemoryRegion<Botan::byte>& key_bits,
-			   Botan::RandomNumberGenerator& rng);
-#endif
 
 	BotanDH_PrivateKey(Botan::RandomNumberGenerator& rng,
 			   const Botan::DL_Group& grp,

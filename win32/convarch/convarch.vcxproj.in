@@ -49,7 +49,7 @@
     <ClInclude Include="..\..\src\lib\crypto\BotanGOSTPublicKey.h" />
     <ClInclude Include="..\..\src\lib\crypto\BotanGOSTR3411.h" />
     <ClInclude Include="..\..\src\lib\crypto\BotanHashAlgorithm.h" />
-    <ClInclude Include="..\..\src\lib\crypto\BotanHMAC.h" />
+    <ClInclude Include="..\..\src\lib\crypto\BotanMAC.h" />
     <ClInclude Include="..\..\src\lib\crypto\BotanMacAlgorithm.h" />
     <ClInclude Include="..\..\src\lib\crypto\BotanMD5.h" />
     <ClInclude Include="..\..\src\lib\crypto\BotanRNG.h" />
@@ -64,8 +64,11 @@
     <ClInclude Include="..\..\src\lib\crypto\BotanSHA512.h" />
     <ClInclude Include="..\..\src\lib\crypto\BotanSymmetricAlgorithm.h" />
     <ClInclude Include="..\..\src\lib\crypto\BotanUtil.h" />
+    <ClInclude Include="..\..\src\lib\crypto\Botan_ecb.h" />
+    <ClInclude Include="..\..\src\lib\crypto\Botan_rounding.h" />
 @END BOTAN
     <ClInclude Include="..\..\src\lib\crypto\CryptoFactory.h" />
+    <ClInclude Include="..\..\src\lib\crypto\DerUtil.h" />
     <ClInclude Include="..\..\src\lib\crypto\DESKey.h" />
     <ClInclude Include="..\..\src\lib\crypto\DHParameters.h" />
     <ClInclude Include="..\..\src\lib\crypto\DHPrivateKey.h" />
@@ -100,6 +103,7 @@
      <ClInclude Include="..\..\src\lib\crypto\OSSLECPrivateKey.h" />
      <ClInclude Include="..\..\src\lib\crypto\OSSLECPublicKey.h" />
      <ClInclude Include="..\..\src\lib\crypto\OSSLEVPHashAlgorithm.h" />
+     <ClInclude Include="..\..\src\lib\crypto\OSSLEVPCMacAlgorithm.h" />
      <ClInclude Include="..\..\src\lib\crypto\OSSLEVPMacAlgorithm.h" />
      <ClInclude Include="..\..\src\lib\crypto\OSSLEVPSymmetricAlgorithm.h" />
      <ClInclude Include="..\..\src\lib\crypto\OSSLGOST.h" />
@@ -107,6 +111,7 @@
      <ClInclude Include="..\..\src\lib\crypto\OSSLGOSTPrivateKey.h" />
      <ClInclude Include="..\..\src\lib\crypto\OSSLGOSTPublicKey.h" />
      <ClInclude Include="..\..\src\lib\crypto\OSSLGOSTR3411.h" />
+     <ClInclude Include="..\..\src\lib\crypto\OSSLCMAC.h" />
      <ClInclude Include="..\..\src\lib\crypto\OSSLHMAC.h" />
      <ClInclude Include="..\..\src\lib\crypto\OSSLMD5.h" />
      <ClInclude Include="..\..\src\lib\crypto\OSSLRNG.h" />
@@ -195,7 +200,7 @@
     <ClCompile Include="..\..\src\lib\crypto\BotanGOSTPublicKey.cpp" />
     <ClCompile Include="..\..\src\lib\crypto\BotanGOSTR3411.cpp" />
     <ClCompile Include="..\..\src\lib\crypto\BotanHashAlgorithm.cpp" />
-    <ClCompile Include="..\..\src\lib\crypto\BotanHMAC.cpp" />
+    <ClCompile Include="..\..\src\lib\crypto\BotanMAC.cpp" />
     <ClCompile Include="..\..\src\lib\crypto\BotanMacAlgorithm.cpp" />
     <ClCompile Include="..\..\src\lib\crypto\BotanMD5.cpp" />
     <ClCompile Include="..\..\src\lib\crypto\BotanRNG.cpp" />
@@ -210,8 +215,10 @@
     <ClCompile Include="..\..\src\lib\crypto\BotanSHA512.cpp" />
     <ClCompile Include="..\..\src\lib\crypto\BotanSymmetricAlgorithm.cpp" />
     <ClCompile Include="..\..\src\lib\crypto\BotanUtil.cpp" />
+    <ClCompile Include="..\..\src\lib\crypto\Botan_ecb.cpp" />
 @END BOTAN
     <ClCompile Include="..\..\src\lib\crypto\CryptoFactory.cpp" />
+    <ClCompile Include="..\..\src\lib\crypto\DerUtil.cpp" />
     <ClCompile Include="..\..\src\lib\crypto\DESKey.cpp" />
     <ClCompile Include="..\..\src\lib\crypto\DHParameters.cpp" />
     <ClCompile Include="..\..\src\lib\crypto\DHPrivateKey.cpp" />
@@ -245,6 +252,7 @@
      <ClCompile Include="..\..\src\lib\crypto\OSSLECPrivateKey.cpp" />
      <ClCompile Include="..\..\src\lib\crypto\OSSLECPublicKey.cpp" />
      <ClCompile Include="..\..\src\lib\crypto\OSSLEVPHashAlgorithm.cpp" />
+     <ClCompile Include="..\..\src\lib\crypto\OSSLEVPCMacAlgorithm.cpp" />
      <ClCompile Include="..\..\src\lib\crypto\OSSLEVPMacAlgorithm.cpp" />
      <ClCompile Include="..\..\src\lib\crypto\OSSLEVPSymmetricAlgorithm.cpp" />
      <ClCompile Include="..\..\src\lib\crypto\OSSLGOST.cpp" />
@@ -252,6 +260,7 @@
      <ClCompile Include="..\..\src\lib\crypto\OSSLGOSTPrivateKey.cpp" />
      <ClCompile Include="..\..\src\lib\crypto\OSSLGOSTPublicKey.cpp" />
      <ClCompile Include="..\..\src\lib\crypto\OSSLGOSTR3411.cpp" />
+     <ClCompile Include="..\..\src\lib\crypto\OSSLCMAC.cpp" />
      <ClCompile Include="..\..\src\lib\crypto\OSSLHMAC.cpp" />
      <ClCompile Include="..\..\src\lib\crypto\OSSLMD5.cpp" />
      <ClCompile Include="..\..\src\lib\crypto\OSSLRNG.cpp" />
@@ -334,7 +343,8 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..;..\..\src\lib;..\..\src\lib\cryptoki_compat;..\..\src\lib\common;..\..\src\lib\object_store;..\..\src\lib\slot_mgr;..\..\src\lib\session_mgr;..\..\src\lib\handle_mgr;..\..\src\lib\crypto;..\..\src\lib\win32;..\..\src\lib\data_mgr;@DEBUGINCPATH@;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..;..\..\src\lib;..\..\src\lib\pkcs11;..\..\src\lib\common;..\..\src\lib\object_store;..\..\src\lib\slot_mgr;..\..\src\lib\session_mgr;..\..\src\lib\handle_mgr;..\..\src\lib\crypto;..\..\src\lib\win32;..\..\src\lib\data_mgr;@DEBUGINCPATH@;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>@RUNTIMELIBRARY@</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -350,7 +360,8 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..;..\..\src\lib;..\..\src\lib\cryptoki_compat;..\..\src\lib\common;..\..\src\lib\object_store;..\..\src\lib\slot_mgr;..\..\src\lib\session_mgr;..\..\src\lib\handle_mgr;..\..\src\lib\crypto;..\..\src\lib\win32;..\..\src\lib\data_mgr;@INCLUDEPATH@;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..;..\..\src\lib;..\..\src\lib\pkcs11;..\..\src\lib\common;..\..\src\lib\object_store;..\..\src\lib\slot_mgr;..\..\src\lib\session_mgr;..\..\src\lib\handle_mgr;..\..\src\lib\crypto;..\..\src\lib\win32;..\..\src\lib\data_mgr;@INCLUDEPATH@;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>@RUNTIMELIBRARY@</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
